@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tailor Application Bundle"
+  short_description: "Tailor any job application from verified evidence"
+  default_prompt: "Use $tailor-application-bundle to combine this job opening with my master curriculum and create a job-family-appropriate application bundle."

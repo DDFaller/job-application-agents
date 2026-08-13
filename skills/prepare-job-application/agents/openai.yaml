@@ -1,0 +1,11 @@
+interface:
+  display_name: "Prepare Job Application"
+  short_description: "Prepare and review any job application"
+  default_prompt: "Use $prepare-job-application to combine this opening with my master curriculum, tailor and independently review the application, then track it."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "notion"
+      description: "Authenticated Notion workspace access"
+      transport: "streamable_http"
+      url: "https://mcp.notion.com/mcp"

@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+.env.*
+
+# Candidate data and generated applications must stay local.
+sources/
+master-curriculum/
+applications/

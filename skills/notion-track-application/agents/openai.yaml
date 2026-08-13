@@ -1,0 +1,11 @@
+interface:
+  display_name: "Track Applications in Notion"
+  short_description: "Track applications through Notion MCP"
+  default_prompt: "Use $notion-track-application to create or update this application in Notion."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "notion"
+      description: "Authenticated Notion workspace access"
+      transport: "streamable_http"
+      url: "https://mcp.notion.com/mcp"

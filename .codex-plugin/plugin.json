@@ -1,0 +1,25 @@
+{
+  "name": "job-application-agents",
+  "version": "0.1.0",
+  "description": "Evidence-backed job application workflows delegated to specialized Codex subagents.",
+  "author": {
+    "name": "Job Application Agents contributors"
+  },
+  "license": "MIT",
+  "keywords": ["jobs", "applications", "resume", "notion", "subagents"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Job Application Agents",
+    "shortDescription": "Delegate evidence-backed job applications.",
+    "longDescription": "Extract job postings, maintain candidate evidence, tailor and review application documents, and track results in Notion through specialized subagents.",
+    "developerName": "Job Application Agents contributors",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Write"],
+    "defaultPrompt": [
+      "Prepare this job application.",
+      "Process my application queue.",
+      "Update this application in Notion."
+    ]
+  }
+}

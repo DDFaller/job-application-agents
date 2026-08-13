@@ -1,0 +1,53 @@
+{
+  "schema_version": 4,
+  "inputs": {
+    "job_json": null,
+    "job_sha256": null,
+    "candidate_evidence_json": null,
+    "candidate_evidence_sha256": null
+  },
+  "job": {
+    "company": null,
+    "role": null,
+    "canonical_url": null
+  },
+  "tailoring_strategy": {
+    "job_family": null,
+    "document_focus": null,
+    "job_priorities": [],
+    "selected_candidate_evidence_ids": [],
+    "deprioritized_candidate_evidence_ids": [],
+    "fit_arguments": [],
+    "selection_rationale": {
+      "text": null,
+      "candidate_evidence_ids": [],
+      "job_evidence_keys": []
+    }
+  },
+  "candidate": {
+    "name": null,
+    "headline": null,
+    "headline_evidence_ids": [],
+    "location": null,
+    "contact": [],
+    "summary": {
+      "text": null,
+      "evidence_ids": []
+    }
+  },
+  "resume_sections": [],
+  "motivation_letter": {
+    "date": null,
+    "recipient": null,
+    "subject": null,
+    "salutation": null,
+    "paragraphs": [],
+    "closing": null,
+    "signature": null
+  },
+  "match_analysis": {
+    "matched": [],
+    "gaps": []
+  },
+  "generated_at": null
+}

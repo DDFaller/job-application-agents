@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "inputs": {
+    "job_json": null,
+    "job_sha256": null,
+    "candidate_evidence_json": null,
+    "candidate_evidence_sha256": null,
+    "bundle_json": null,
+    "bundle_sha256": null
+  },
+  "checks": {
+    "job_family_supported": null,
+    "priorities_job_grounded": null,
+    "selected_evidence_relevant": null,
+    "document_focus_appropriate": null,
+    "claims_evidence_backed": null
+  },
+  "findings": [],
+  "verdict": null,
+  "reviewed_at": null
+}
