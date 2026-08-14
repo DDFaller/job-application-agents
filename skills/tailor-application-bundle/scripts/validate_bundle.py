@@ -238,6 +238,9 @@ def validate(bundle: dict[str, Any], template: dict[str, Any], bundle_path: Path
         if not isinstance(section, dict) or set(section) != {"title", "items"} or not nonempty(section.get("title")) or not isinstance(section.get("items"), list):
             errors.append(f"resume_sections.{si} has an invalid shape")
             continue
+        entry_types = {item.get("type") for item in section["items"] if isinstance(item, dict)}
+        if len(entry_types) > 1:
+            errors.append(f"resume_sections.{si}.items must use one entry type for RenderCV compatibility")
         for ii, item in enumerate(section["items"]):
             label = f"resume_sections.{si}.items.{ii}"
             if not isinstance(item, dict) or item.get("type") not in ENTRY_FIELDS:

@@ -18,4 +18,8 @@ Use only the connected Notion MCP. Do not request or store a separate Notion API
 7. Preserve unrelated page content. Replace only the stable `Current Documents` section when regenerating.
 8. Apply the status/date rules in the reference and fetch the page after mutation to verify it.
 
+## Backfill existing bundles
+
+When a user asks to apply a new document heuristic to an existing status column, query that exact live Notion status first. Audit each card's current local bundle without changing it. Regenerate only noncompliant bundles through `$tailor-application-bundle`; never edit an immutable version. After each replacement passes review and visual inspection, update `Current Version`, `Generated At`, `Local Bundle Path`, `Match Summary`, and only the `Current Documents` section. Preserve status, dates, notes unrelated to the regeneration, and every compliant card unchanged.
+
 Never submit a job application. Never create duplicate database rows to recover from a partial failure.

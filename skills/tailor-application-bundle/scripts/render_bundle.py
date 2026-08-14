@@ -384,6 +384,8 @@ def main() -> int:
             photo_name = "profile-photo" + photo.suffix.lower()
             shutil.copy2(photo, stage_dir / photo_name)
         (stage_dir / "bundle.json").write_text(json.dumps(bundle, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        shutil.copy2(Path(bundle["inputs"]["job_json"]), stage_dir / "job.json")
+        shutil.copy2(Path(bundle["inputs"]["candidate_evidence_json"]), stage_dir / "candidate-evidence.json")
         (stage_dir / "resume.yaml").write_text("# Generated deterministically from bundle.json\n" + "\n".join(yaml_dump(rendercv_document(bundle, profile, photo_name))) + "\n", encoding="utf-8")
         (stage_dir / "motivation-letter.md").write_text(letter_markdown(bundle), encoding="utf-8")
         (stage_dir / "match-analysis.md").write_text(match_markdown(bundle), encoding="utf-8")
@@ -392,7 +394,7 @@ def main() -> int:
         for preview in stage_dir.glob("resume*.png"):
             preview.unlink()
         artifacts = {p.name: {"sha256": sha256(p), "bytes": p.stat().st_size} for p in sorted(stage_dir.iterdir()) if p.is_file()}
-        manifest = {"schema_version": 1, "version": f"v{version:03d}", "generated_at": datetime.now(timezone.utc).isoformat(), "job": bundle["job"], "inputs": bundle["inputs"], "rendering": {"resume_engine": "rendercv", "rendercv_version": RENDERCV_VERSION, "profile": profile, "theme": design["theme"], "page_size": design["page"]["size"], "max_pages": max_pages, "photo": photo_name, "letter_engine": "groff"}, "artifacts": artifacts, "notion_page_url": None}
+        manifest = {"schema_version": 1, "version": f"v{version:03d}", "generated_at": datetime.now(timezone.utc).isoformat(), "job": bundle["job"], "inputs": bundle["inputs"], "input_snapshots": {"job_json": "job.json", "candidate_evidence_json": "candidate-evidence.json"}, "rendering": {"resume_engine": "rendercv", "rendercv_version": RENDERCV_VERSION, "profile": profile, "theme": design["theme"], "page_size": design["page"]["size"], "max_pages": max_pages, "photo": photo_name, "letter_engine": "groff"}, "artifacts": artifacts, "notion_page_url": None}
         (stage_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         stage_dir.rename(out_dir)
         stage_dir = None
