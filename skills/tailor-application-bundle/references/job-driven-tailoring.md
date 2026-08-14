@@ -18,6 +18,7 @@ Use `technical` or `balanced` focus for computing jobs, `transferable` or `balan
 3. Put every other candidate fact in `deprioritized_candidate_evidence_ids`. Selected and deprioritized IDs must be disjoint and together cover every candidate fact.
 4. Build `fit_arguments` that cite both sides. A coincidental keyword is not enough; describe the supported relationship.
 5. Cite all candidate claims with selected evidence. Do not turn an adjacent fact into direct experience.
+6. Draft for a balanced one-page résumé. If visual inspection finds the first accepted render conspicuously underfilled, reconsider deprioritized evidence once in this order: relevant work experience, relevant education, then other relevant facts. Move every newly used fact into the selected partition. Stop when the page is balanced or no further relevant evidence exists; never use irrelevant facts as filler.
 
 ## Non-computing and minor jobs
 

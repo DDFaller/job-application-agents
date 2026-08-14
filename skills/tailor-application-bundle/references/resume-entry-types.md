@@ -12,4 +12,4 @@ Every `resume_sections[].items[]` object contains `type`, `evidence_ids`, and th
 - `reversed_numbered`: `text`
 - `text`: `text`
 
-Every object in `highlights` is `{ "text": ..., "evidence_ids": [...] }`. All authored claims, including one-line details and standalone text, must be supported by the entry's `evidence_ids`; highlights additionally carry their own evidence IDs. Do not add empty sections. Prefer one-line entries for skills and languages. Keep the complete resume within two US Letter pages under the fixed RenderCV Sb2nov theme.
+Every object in `highlights` is `{ "text": ..., "evidence_ids": [...] }`. All authored claims, including one-line details and standalone text, must be supported by the entry's `evidence_ids`; highlights additionally carry their own evidence IDs. Do not add empty sections. Prefer one-line entries for skills and languages. Target one balanced page and never exceed one page under either rendering profile. When an accepted first render is visibly underfilled, expand once with relevant experience first, then education, before considering other supported content.

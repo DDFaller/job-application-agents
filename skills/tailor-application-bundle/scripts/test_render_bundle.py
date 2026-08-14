@@ -64,6 +64,7 @@ class RenderBundleTests(unittest.TestCase):
         rendered = "\n".join(render_bundle.yaml_dump(document))
         self.assertIn('theme: "sb2nov"', rendered)
         self.assertIn('size: "us-letter"', rendered)
+        self.assertEqual(render_bundle.profile_design("international", False)[1], 1)
 
     def test_france_profile_uses_a4_and_photo(self) -> None:
         bundle = {

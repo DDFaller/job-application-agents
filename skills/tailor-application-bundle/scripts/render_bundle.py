@@ -257,7 +257,7 @@ def discover_approved_photo() -> Path | None:
 
 def profile_design(profile: str, with_photo: bool) -> tuple[dict[str, Any], int]:
     if profile == "international":
-        return {"theme": "sb2nov", "page": {"size": "us-letter"}}, 2
+        return {"theme": "sb2nov", "page": {"size": "us-letter"}}, 1
     if profile != "france":
         raise ValueError(f"unknown rendering profile: {profile}")
     design: dict[str, Any] = {
