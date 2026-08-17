@@ -14,7 +14,7 @@ Use only the connected Notion MCP. Do not request or store a separate Notion API
 3. Fetch the database before every create or update. Use its exact data-source ID and property names.
 4. Deduplicate with a parameterized data-source query: canonical `Job URL`, then `Source Job ID` plus company and role.
 5. Create or update the page only after the local bundle and manifest exist.
-6. Upload the current resume and motivation-letter PDFs with `create_file_upload`, one multipart POST per returned URL, then use the returned attachment Markdown in the page.
+6. Create upload targets for the current resume and motivation-letter PDFs first. Send the two independent multipart POSTs concurrently, then use both returned attachment Markdown values in the page. Keep the page mutation and post-mutation verification sequential.
 7. Preserve unrelated page content. Replace only the stable `Current Documents` section when regenerating.
 8. Apply the status/date rules in the reference and fetch the page after mutation to verify it.
 

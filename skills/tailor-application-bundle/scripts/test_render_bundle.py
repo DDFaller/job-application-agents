@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import tempfile
 import unittest
+from unittest import mock
 
 
 SCRIPT = Path(__file__).with_name("render_bundle.py")
@@ -65,6 +67,64 @@ class RenderBundleTests(unittest.TestCase):
         self.assertIn('theme: "sb2nov"', rendered)
         self.assertIn('size: "us-letter"', rendered)
         self.assertEqual(render_bundle.profile_design("international", False)[1], 1)
+
+    def test_render_resume_does_not_generate_png(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            out_dir = Path(temporary)
+            yaml_path = out_dir / "resume.yaml"
+            yaml_path.write_text("resume", encoding="utf-8")
+            (out_dir / "resume.pdf").write_bytes(b"pdf")
+            calls = []
+
+            def run(command, **kwargs):
+                calls.append(command)
+                if command[0] == "pdfinfo":
+                    return mock.Mock(returncode=0, stdout="Pages:           1\n", stderr="")
+                if command[0] == "pdftotext":
+                    return mock.Mock(returncode=0, stdout="Candidate", stderr="")
+                return mock.Mock(returncode=0, stdout="", stderr="")
+
+            with mock.patch.object(render_bundle.subprocess, "run", side_effect=run), mock.patch.object(render_bundle.shutil, "which", side_effect=lambda name: name):
+                render_bundle.render_resume(Path("rendercv"), yaml_path, out_dir, 1)
+
+            render_command = calls[0]
+            self.assertIn("--dont-generate-png", render_command)
+            self.assertNotIn("--png-path", render_command)
+            self.assertNotIn("resume.png", render_command)
+
+    def test_render_resume_bounds_child_processes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            out_dir = Path(temporary)
+            yaml_path = out_dir / "resume.yaml"
+            yaml_path.write_text("resume", encoding="utf-8")
+            (out_dir / "resume.pdf").write_bytes(b"pdf")
+            calls = []
+
+            def run(command, **kwargs):
+                calls.append((command, kwargs))
+                if command[0] == "pdfinfo":
+                    return mock.Mock(returncode=0, stdout="Pages:           1\n", stderr="")
+                if command[0] == "pdftotext":
+                    return mock.Mock(returncode=0, stdout="Candidate", stderr="")
+                return mock.Mock(returncode=0, stdout="", stderr="")
+
+            with mock.patch.object(render_bundle.subprocess, "run", side_effect=run), mock.patch.object(render_bundle.shutil, "which", side_effect=lambda name: name):
+                render_bundle.render_resume(Path("rendercv"), yaml_path, out_dir, 1)
+
+            self.assertTrue(all(kwargs.get("timeout") == render_bundle.SUBPROCESS_TIMEOUT_SECONDS for _, kwargs in calls))
+
+    def test_rendercv_document_disables_png_generation(self) -> None:
+        bundle = {
+            "inputs": {"job_json": "/missing"},
+            "candidate": {"name": "A", "headline": "B", "location": None, "contact": [], "summary": {"text": "C"}},
+            "resume_sections": [],
+        }
+        self.assertTrue(render_bundle.rendercv_document(bundle)["settings"]["render_command"]["dont_generate_png"])
+
+    def test_preflight_checks_all_rendering_tools(self) -> None:
+        with mock.patch.object(render_bundle, "rendercv_binary", return_value=Path("rendercv")) as rendercv, mock.patch.object(render_bundle.shutil, "which", side_effect=lambda name: name):
+            render_bundle.preflight_rendering(Path("skill"))
+        rendercv.assert_called_once_with(Path("skill"))
 
     def test_france_profile_uses_a4_and_photo(self) -> None:
         bundle = {

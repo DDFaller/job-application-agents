@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -17,8 +18,8 @@ STATUSES = {"complete", "partial", "blocked"}
 CATEGORIES = {"identity", "contact", "profile", "experience", "project", "education", "skill", "language"}
 
 
-def load(path: Path) -> dict[str, Any]:
-    value = json.loads(path.read_text(encoding="utf-8"))
+def load_bytes(data: bytes, path: Path) -> dict[str, Any]:
+    value = json.loads(data.decode("utf-8"))
     if not isinstance(value, dict):
         raise ValueError(f"{path} must contain an object")
     return value
@@ -30,6 +31,85 @@ def file_hash(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def file_bytes(path: Path) -> tuple[bytes, str]:
+    data = path.read_bytes()
+    return data, hashlib.sha256(data).hexdigest()
+
+
+def receipt_for(record: dict[str, Any], evidence_path: Path) -> dict[str, Any]:
+    sources = []
+    for source in record.get("sources", []):
+        original = Path(source["path"]).expanduser().resolve()
+        snapshot = Path(source["snapshot_path"]).expanduser().resolve()
+        sources.append({
+            "path": str(original),
+            "sha256": source["sha256"],
+            "size": original.stat().st_size,
+            "mtime_ns": original.stat().st_mtime_ns,
+            "snapshot_path": str(snapshot),
+            "snapshot_sha256": source["snapshot_sha256"],
+            "snapshot_size": snapshot.stat().st_size,
+            "snapshot_mtime_ns": snapshot.stat().st_mtime_ns,
+        })
+    _, artifact_sha256 = file_bytes(evidence_path)
+    return {
+        "schema_version": 1,
+        "validator": "validate_candidate_evidence",
+        "generated_at_ns": time.time_ns(),
+        "artifact_path": str(evidence_path.expanduser().resolve()),
+        "artifact_sha256": artifact_sha256,
+        "sources": sources,
+    }
+
+
+def verify_receipt(receipt_path: Path, evidence_path: Path) -> list[str]:
+    errors: list[str] = []
+    try:
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        if not isinstance(receipt, dict) or receipt.get("schema_version") != 1:
+            return ["candidate evidence receipt has an unsupported schema"]
+        if receipt.get("validator") != "validate_candidate_evidence":
+            errors.append("candidate evidence receipt has an unexpected validator")
+        resolved = evidence_path.expanduser().resolve()
+        if receipt.get("artifact_path") != str(resolved):
+            errors.append("candidate evidence receipt points to a different artifact")
+        artifact_bytes, artifact_sha256 = file_bytes(resolved)
+        if receipt.get("artifact_sha256") != artifact_sha256:
+            errors.append("candidate evidence receipt artifact hash does not match")
+        record = json.loads(artifact_bytes.decode("utf-8"))
+        expected = {
+            (str(Path(item["path"]).expanduser().resolve()), str(Path(item["snapshot_path"]).expanduser().resolve())): item
+            for item in record.get("sources", [])
+        }
+        receipt_sources = receipt.get("sources")
+        if not isinstance(receipt_sources, list) or len(receipt_sources) != len(expected):
+            errors.append("candidate evidence receipt sources do not match the artifact")
+            receipt_sources = []
+        seen = set()
+        for item in receipt_sources:
+            key = (item.get("path"), item.get("snapshot_path"))
+            if key in seen or key not in expected:
+                errors.append("candidate evidence receipt contains an unexpected source")
+                continue
+            seen.add(key)
+            source = expected[key]
+            if item.get("sha256") != source.get("sha256") or item.get("snapshot_sha256") != source.get("snapshot_sha256"):
+                errors.append(f"candidate evidence receipt hashes do not match: {key[0]}")
+            for key in ("path", "snapshot_path"):
+                path = Path(item[key])
+                if not path.is_file():
+                    errors.append(f"receipt file is missing: {path}")
+                    continue
+                stat = path.stat()
+                size_key = "size" if key == "path" else "snapshot_size"
+                mtime_key = "mtime_ns" if key == "path" else "snapshot_mtime_ns"
+                if stat.st_size != item.get(size_key) or stat.st_mtime_ns != item.get(mtime_key):
+                    errors.append(f"receipt file changed: {path}")
+    except (KeyError, OSError, TypeError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        errors.append(f"cannot verify candidate evidence receipt: {exc}")
+    return errors
 
 
 def aware_timestamp(value: Any) -> bool:
@@ -96,8 +176,9 @@ def validate(record: dict[str, Any], template: dict[str, Any]) -> tuple[list[str
             snapshot = Path(source["snapshot_path"]).expanduser().resolve()
             if not original.is_file() or file_hash(original) != source["sha256"]:
                 errors.append(f"sources.{index} original file hash mismatch")
-            text = snapshot.read_text(encoding="utf-8")
-            digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            snapshot_bytes = snapshot.read_bytes()
+            text = snapshot_bytes.decode("utf-8")
+            digest = hashlib.sha256(snapshot_bytes).hexdigest()
             if digest != source["snapshot_sha256"]:
                 errors.append(f"sources.{index} snapshot hash mismatch")
             source_paths.add(str(original))
@@ -178,11 +259,22 @@ def validate(record: dict[str, Any], template: dict[str, Any]) -> tuple[list[str
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence", required=True, type=Path)
+    parser.add_argument("--receipt", type=Path, help="write a same-run validation receipt")
+    parser.add_argument("--verify-receipt", type=Path, help="verify a same-run receipt without rehashing sources")
     parser.add_argument("--template", type=Path, default=Path(__file__).resolve().parent.parent / "references" / "candidate-evidence-template.json")
     args = parser.parse_args()
+    if args.verify_receipt:
+        errors = verify_receipt(args.verify_receipt, args.evidence)
+        if errors:
+            for error in errors:
+                print(f"validation failed: {error}", file=sys.stderr)
+            return 1
+        print(f"valid receipt: {args.evidence}")
+        return 0
     try:
-        record = load(args.evidence)
-        errors, notices = validate(record, load(args.template))
+        record = load_bytes(args.evidence.read_bytes(), args.evidence)
+        template = load_bytes(args.template.read_bytes(), args.template)
+        errors, notices = validate(record, template)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"validation failed: {exc}", file=sys.stderr)
         return 1
@@ -195,6 +287,8 @@ def main() -> int:
     if record["extraction_status"] != "complete":
         return 2
     print(f"valid and ready: {args.evidence}")
+    if args.receipt:
+        args.receipt.write_text(json.dumps(receipt_for(record, args.evidence), indent=2) + "\n", encoding="utf-8")
     return 0
 
 

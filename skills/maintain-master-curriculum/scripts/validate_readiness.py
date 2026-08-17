@@ -12,6 +12,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+SUBPROCESS_TIMEOUT_SECONDS = 60
+
 from validate_master_sources import PROFILE_PHOTOS, read_facts, source_hashes
 
 TOP = {"schema_version", "status", "source_version", "source_dir", "source_hashes", "candidate_evidence", "hard_blockers", "quality_gaps", "coverage", "generated_at"}
@@ -100,13 +102,13 @@ def validate(report: dict[str, Any]) -> list[str]:
             if not validator.is_file():
                 errors.append("candidate evidence validator does not exist")
             else:
-                result = subprocess.run([sys.executable, str(validator), "--evidence", str(evidence_path)], capture_output=True, text=True, check=False)
+                result = subprocess.run([sys.executable, str(validator), "--evidence", str(evidence_path)], capture_output=True, text=True, check=False, timeout=SUBPROCESS_TIMEOUT_SECONDS)
                 validator_exit = result.returncode
                 if validator_exit not in {0, 1, 2}:
                     errors.append(f"candidate validator returned unexpected exit {validator_exit}")
                 if evidence_view.get("validator_exit") != validator_exit:
                     errors.append("reported validator_exit does not match live validator")
-        except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        except (OSError, TypeError, ValueError, json.JSONDecodeError, subprocess.TimeoutExpired) as exc:
             errors.append(f"cannot verify candidate evidence: {exc}")
 
     if evidence:

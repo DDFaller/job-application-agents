@@ -11,6 +11,10 @@ A shareable Codex plugin for evidence-backed job applications. It uses small, sp
 - `tailor-application-bundle` writes, independently reviews, validates, and renders application documents.
 - `notion-track-application` deduplicates and tracks applications through Notion MCP.
 
+See [the complete job-application workflow](docs/job-application-workflow.md)
+for the execution order, agent responsibilities, validation scripts, expected
+artifacts, retry rules, and Notion handoff.
+
 The plugin never submits applications. Candidate claims must be supported by approved local evidence.
 
 ## Requirements

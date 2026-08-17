@@ -17,6 +17,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 RENDERCV_VERSION = "2.8"
+SUBPROCESS_TIMEOUT_SECONDS = 60
 PROFILES = ("auto", "international", "france")
 FRANCE_LOCATION_TOKENS = {
     "france", "paris", "lyon", "marseille", "toulouse", "bordeaux", "lille",
@@ -202,11 +203,12 @@ def rendercv_entry(item: dict[str, Any]) -> Any:
     return {prefixes.get(kind, "bullet" if kind == "bullet" else "text"): item["text"]}
 
 
-def job_locale(bundle: dict[str, Any]) -> str:
+def job_locale(bundle: dict[str, Any], job: dict[str, Any] | None = None) -> str:
+    if job is None:
+        job = load_job(bundle)
     try:
-        job = json.loads(Path(bundle["inputs"]["job_json"]).read_text(encoding="utf-8"))
         language = str(job.get("language") or "english").strip().lower().replace("_", "-")
-    except (OSError, ValueError, TypeError):
+    except (AttributeError, TypeError):
         return "english"
     names = set(LOCALES.values())
     if language in names:
@@ -222,12 +224,13 @@ def load_job(bundle: dict[str, Any]) -> dict[str, Any]:
         return {}
 
 
-def resolve_profile(bundle: dict[str, Any], requested: str) -> str:
+def resolve_profile(bundle: dict[str, Any], requested: str, job: dict[str, Any] | None = None) -> str:
     if requested not in PROFILES:
         raise ValueError(f"unknown rendering profile: {requested}")
     if requested != "auto":
         return requested
-    job = load_job(bundle)
+    if job is None:
+        job = load_job(bundle)
     location = str(job.get("location") or bundle.get("job", {}).get("location") or "").casefold()
     return "france" if any(token in location for token in FRANCE_LOCATION_TOKENS) else "international"
 
@@ -270,7 +273,12 @@ def profile_design(profile: str, with_photo: bool) -> tuple[dict[str, Any], int]
     return design, 1
 
 
-def rendercv_document(bundle: dict[str, Any], profile: str = "international", photo_name: str | None = None) -> dict[str, Any]:
+def rendercv_document(
+    bundle: dict[str, Any],
+    profile: str = "international",
+    photo_name: str | None = None,
+    job: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     candidate = bundle["candidate"]
     cv: dict[str, Any] = {"name": candidate["name"], "headline": candidate.get("headline"), "location": candidate.get("location")}
     if photo_name:
@@ -284,8 +292,8 @@ def rendercv_document(bundle: dict[str, Any], profile: str = "international", ph
     return {
         "cv": cv,
         "design": design,
-        "locale": {"language": job_locale(bundle)},
-        "settings": {"current_date": "today", "render_command": {"dont_generate_png": False}, "pdf_title": f"{candidate['name']} - CV"},
+        "locale": {"language": job_locale(bundle, job)},
+        "settings": {"current_date": "today", "render_command": {"dont_generate_png": True}, "pdf_title": f"{candidate['name']} - CV"},
     }
 
 
@@ -306,10 +314,10 @@ def letter_roff(bundle: dict[str, Any], style: str) -> str:
 def to_letter_pdf(document: str, out_dir: Path) -> None:
     if not shutil.which("groff") or not shutil.which("ps2pdf"):
         raise RuntimeError("groff and ps2pdf are required for motivation-letter rendering")
-    groff = subprocess.run(["groff", "-Kutf8", "-Tps"], input=document.encode(), capture_output=True)
+    groff = subprocess.run(["groff", "-Kutf8", "-Tps"], input=document.encode(), capture_output=True, timeout=SUBPROCESS_TIMEOUT_SECONDS)
     if groff.returncode:
         raise RuntimeError(groff.stderr.decode(errors="replace").strip())
-    gs = subprocess.run(["ps2pdf", "-", str(out_dir / "motivation-letter.pdf")], input=groff.stdout, capture_output=True)
+    gs = subprocess.run(["ps2pdf", "-", str(out_dir / "motivation-letter.pdf")], input=groff.stdout, capture_output=True, timeout=SUBPROCESS_TIMEOUT_SECONDS)
     if gs.returncode:
         raise RuntimeError(gs.stderr.decode(errors="replace").strip())
 
@@ -318,31 +326,59 @@ def rendercv_binary(skill_dir: Path) -> Path:
     binary = skill_dir / ".venv" / "bin" / "rendercv"
     if not binary.is_file():
         raise RuntimeError(f'RenderCV preflight failed: install with `python3 -m venv "{skill_dir / ".venv"}" && "{skill_dir / ".venv" / "bin" / "pip"}" install "rendercv[full]=={RENDERCV_VERSION}"`')
-    check = subprocess.run([str(binary), "--version"], text=True, capture_output=True)
+    check = subprocess.run([str(binary), "--version"], text=True, capture_output=True, timeout=SUBPROCESS_TIMEOUT_SECONDS)
     if check.returncode or RENDERCV_VERSION not in (check.stdout + check.stderr):
         raise RuntimeError(f"RenderCV preflight failed: expected version {RENDERCV_VERSION}")
     return binary
 
 
-def render_resume(binary: Path, yaml_path: Path, out_dir: Path, max_pages: int) -> None:
-    command = [str(binary), "render", str(yaml_path), "--pdf-path", str(out_dir / "resume.pdf"), "--typst-path", str(out_dir / "resume.typ"), "--markdown-path", str(out_dir / "resume.md"), "--png-path", str(out_dir / "resume.png"), "--dont-generate-html"]
-    result = subprocess.run(command, cwd=out_dir, text=True, capture_output=True)
+def render_resume(binary: Path, yaml_path: Path, out_dir: Path, max_pages: int) -> dict[str, int]:
+    command = [str(binary), "render", str(yaml_path), "--pdf-path", str(out_dir / "resume.pdf"), "--typst-path", str(out_dir / "resume.typ"), "--markdown-path", str(out_dir / "resume.md"), "--dont-generate-html", "--dont-generate-png"]
+    result = subprocess.run(command, cwd=out_dir, text=True, capture_output=True, timeout=SUBPROCESS_TIMEOUT_SECONDS)
     if result.returncode:
         raise RuntimeError("RenderCV failed: " + (result.stderr.strip() or result.stdout.strip()))
     pdfinfo = shutil.which("pdfinfo")
     pdftotext = shutil.which("pdftotext")
     if not pdfinfo or not pdftotext:
         raise RuntimeError("pdfinfo and pdftotext are required for resume quality checks")
-    info = subprocess.run([pdfinfo, str(out_dir / "resume.pdf")], text=True, capture_output=True)
+    info = subprocess.run([pdfinfo, str(out_dir / "resume.pdf")], text=True, capture_output=True, timeout=SUBPROCESS_TIMEOUT_SECONDS)
     match = re.search(r"^Pages:\s+(\d+)$", info.stdout, re.MULTILINE)
     if info.returncode or not match:
         raise RuntimeError("could not determine resume page count")
     pages = int(match.group(1))
-    if pages > max_pages:
-        raise RuntimeError(f"resume exceeds the {max_pages}-page limit: rendered {pages} pages")
-    extracted = subprocess.run([pdftotext, str(out_dir / "resume.pdf"), "-"], text=True, capture_output=True)
+    if pages < 1 or pages > max_pages:
+        raise RuntimeError(f"resume must contain 1-{max_pages} pages; rendered {pages} pages")
+    extracted = subprocess.run([pdftotext, str(out_dir / "resume.pdf"), "-"], text=True, capture_output=True, timeout=SUBPROCESS_TIMEOUT_SECONDS)
     if extracted.returncode or not extracted.stdout.strip():
         raise RuntimeError("resume PDF has no extractable text")
+    return {"pages": pages, "text_chars": len(extracted.stdout.strip())}
+
+
+def inspect_pdf(path: Path, label: str, max_pages: int) -> dict[str, int]:
+    """Run the same bounded, deterministic checks for every generated PDF."""
+    pdfinfo = shutil.which("pdfinfo")
+    pdftotext = shutil.which("pdftotext")
+    if not pdfinfo or not pdftotext:
+        raise RuntimeError("pdfinfo and pdftotext are required for PDF quality checks")
+    info = subprocess.run([pdfinfo, str(path)], text=True, capture_output=True, timeout=SUBPROCESS_TIMEOUT_SECONDS)
+    match = re.search(r"^Pages:\s+(\d+)$", info.stdout, re.MULTILINE)
+    if info.returncode or not match:
+        raise RuntimeError(f"could not determine {label} page count")
+    pages = int(match.group(1))
+    if pages < 1 or pages > max_pages:
+        raise RuntimeError(f"{label} must contain 1-{max_pages} pages; rendered {pages} pages")
+    extracted = subprocess.run([pdftotext, str(path), "-"], text=True, capture_output=True, timeout=SUBPROCESS_TIMEOUT_SECONDS)
+    text_chars = len(extracted.stdout.strip())
+    if extracted.returncode or text_chars == 0:
+        raise RuntimeError(f"{label} PDF has no extractable text")
+    return {"pages": pages, "text_chars": text_chars}
+
+
+def preflight_rendering(skill_dir: Path) -> None:
+    rendercv_binary(skill_dir)
+    missing = [tool for tool in ("groff", "ps2pdf", "pdfinfo", "pdftotext") if not shutil.which(tool)]
+    if missing:
+        raise RuntimeError("required rendering tools are missing: " + ", ".join(missing))
 
 
 def sha256(path: Path) -> str:
@@ -356,17 +392,29 @@ def sha256(path: Path) -> str:
 def main() -> int:
     skill_dir = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser()
-    parser.add_argument("--bundle-json", required=True, type=Path)
-    parser.add_argument("--application-root", required=True, type=Path)
+    parser.add_argument("--bundle-json", type=Path)
+    parser.add_argument("--application-root", type=Path)
     parser.add_argument("--style", type=Path, default=skill_dir / "assets" / "application.ms")
     parser.add_argument("--profile", choices=PROFILES, default="auto")
     parser.add_argument("--photo", type=Path, help="Explicitly approved local JPEG/PNG; France profile only")
+    parser.add_argument("--preflight", action="store_true", help="check rendering tools without rendering a bundle")
     args = parser.parse_args()
+    if args.preflight:
+        try:
+            preflight_rendering(skill_dir)
+            print("rendering tools ready")
+            return 0
+        except Exception as exc:
+            print(f"render preflight failed: {exc}", file=sys.stderr)
+            return 1
+    if not args.bundle_json or not args.application_root:
+        parser.error("--bundle-json and --application-root are required unless --preflight is used")
     stage_dir: Path | None = None
     try:
         bundle = json.loads(args.bundle_json.read_text(encoding="utf-8"))
         validate(bundle)
-        profile = resolve_profile(bundle, args.profile)
+        job = load_job(bundle)
+        profile = resolve_profile(bundle, args.profile, job)
         if args.photo and profile != "france":
             raise ValueError("--photo is accepted only with the France profile")
         photo = validate_photo(args.photo) if args.photo else (discover_approved_photo() if profile == "france" else None)
@@ -386,15 +434,14 @@ def main() -> int:
         (stage_dir / "bundle.json").write_text(json.dumps(bundle, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         shutil.copy2(Path(bundle["inputs"]["job_json"]), stage_dir / "job.json")
         shutil.copy2(Path(bundle["inputs"]["candidate_evidence_json"]), stage_dir / "candidate-evidence.json")
-        (stage_dir / "resume.yaml").write_text("# Generated deterministically from bundle.json\n" + "\n".join(yaml_dump(rendercv_document(bundle, profile, photo_name))) + "\n", encoding="utf-8")
+        (stage_dir / "resume.yaml").write_text("# Generated deterministically from bundle.json\n" + "\n".join(yaml_dump(rendercv_document(bundle, profile, photo_name, job))) + "\n", encoding="utf-8")
         (stage_dir / "motivation-letter.md").write_text(letter_markdown(bundle), encoding="utf-8")
         (stage_dir / "match-analysis.md").write_text(match_markdown(bundle), encoding="utf-8")
-        render_resume(binary, stage_dir / "resume.yaml", stage_dir, max_pages)
+        resume_quality = render_resume(binary, stage_dir / "resume.yaml", stage_dir, max_pages)
         to_letter_pdf(letter_roff(bundle, args.style.read_text(encoding="utf-8")), stage_dir)
-        for preview in stage_dir.glob("resume*.png"):
-            preview.unlink()
+        letter_quality = inspect_pdf(stage_dir / "motivation-letter.pdf", "motivation letter", 1)
         artifacts = {p.name: {"sha256": sha256(p), "bytes": p.stat().st_size} for p in sorted(stage_dir.iterdir()) if p.is_file()}
-        manifest = {"schema_version": 1, "version": f"v{version:03d}", "generated_at": datetime.now(timezone.utc).isoformat(), "job": bundle["job"], "inputs": bundle["inputs"], "input_snapshots": {"job_json": "job.json", "candidate_evidence_json": "candidate-evidence.json"}, "rendering": {"resume_engine": "rendercv", "rendercv_version": RENDERCV_VERSION, "profile": profile, "theme": design["theme"], "page_size": design["page"]["size"], "max_pages": max_pages, "photo": photo_name, "letter_engine": "groff"}, "artifacts": artifacts, "notion_page_url": None}
+        manifest = {"schema_version": 1, "version": f"v{version:03d}", "generated_at": datetime.now(timezone.utc).isoformat(), "job": bundle["job"], "inputs": bundle["inputs"], "input_snapshots": {"job_json": "job.json", "candidate_evidence_json": "candidate-evidence.json"}, "rendering": {"resume_engine": "rendercv", "rendercv_version": RENDERCV_VERSION, "profile": profile, "theme": design["theme"], "page_size": design["page"]["size"], "max_pages": max_pages, "photo": photo_name, "letter_engine": "groff"}, "quality_gate": {"automated": "passed", "resume": resume_quality, "motivation_letter": letter_quality, "visual_inspection": "required", "reviewed_artifacts": ["resume.pdf", "motivation-letter.pdf", "match-analysis.md"]}, "artifacts": artifacts, "notion_page_url": None}
         (stage_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         stage_dir.rename(out_dir)
         stage_dir = None

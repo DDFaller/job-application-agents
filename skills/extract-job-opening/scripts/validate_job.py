@@ -154,11 +154,12 @@ def validate(job: dict[str, Any], template: dict[str, Any], job_path: Path) -> t
         if not source_path.is_absolute():
             source_path = (job_path.parent / source_path).resolve()
         try:
-            source_text = source_path.read_text(encoding="utf-8")
+            source_bytes = source_path.read_bytes()
+            source_text = source_bytes.decode("utf-8")
         except OSError as exc:
             errors.append(f"cannot read source_document: {exc}")
         if source_text is not None:
-            actual_hash = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
+            actual_hash = hashlib.sha256(source_bytes).hexdigest()
             if job.get("source_sha256") != actual_hash:
                 errors.append("source_sha256 does not match source_document")
     elif status != "blocked":

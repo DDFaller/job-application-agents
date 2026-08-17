@@ -27,8 +27,8 @@ ENTRY_FIELDS = {
 }
 
 
-def load(path: Path) -> dict[str, Any]:
-    value = json.loads(path.read_text(encoding="utf-8"))
+def load_bytes(data: bytes, path: Path) -> dict[str, Any]:
+    value = json.loads(data.decode("utf-8"))
     if not isinstance(value, dict):
         raise ValueError(f"{path} must contain an object")
     return value
@@ -137,10 +137,11 @@ def validate(bundle: dict[str, Any], template: dict[str, Any], bundle_path: Path
             if not path.is_file():
                 errors.append(f"{path_key} does not exist")
                 continue
-            if digest(path) != inputs[hash_key]:
+            data = path.read_bytes()
+            if hashlib.sha256(data).hexdigest() != inputs[hash_key]:
                 errors.append(f"{hash_key} does not match {path_key}")
                 continue
-            artifacts[path_key] = load(path)
+            artifacts[path_key] = load_bytes(data, path)
         except (OSError, TypeError, json.JSONDecodeError, ValueError) as exc:
             errors.append(f"cannot verify {path_key}: {exc}")
     if set(artifacts) != {"job_json", "candidate_evidence_json"}:
