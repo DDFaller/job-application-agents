@@ -1,4 +1,4 @@
 interface:
   display_name: "Manage Job Applications"
-  short_description: "Delegate end-to-end application workflows"
-  default_prompt: "Use $manage-job-applications to coordinate my job applications with specialized subagents."
+  short_description: "Coordinate queues and review Notion boards"
+  default_prompt: "Use $manage-job-applications to coordinate and review my job application pipeline."

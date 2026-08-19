@@ -7,6 +7,16 @@ description: Create, deduplicate, update, and move job application records in th
 
 Use only the connected Notion MCP. Do not request or store a separate Notion API token.
 
+`Generated At` is the authoritative timestamp for when the current application
+bundle was generated. `Applied At` is the separate submission timestamp; never
+derive one from the other. Board audits of bundle completeness or recency and
+unanswered-application age calculations must inspect `Generated At`; `Applied
+At` remains submission metadata.
+
+Delegate board reviews and stale-card sweeps to `$requeue-unanswered-applications`.
+Its normal review mode may change only qualifying `APPLIED` statuses to
+`REAPPLY`; an explicitly requested preview, audit, or dry run remains read-only.
+
 ## Workflow
 
 1. Call Notion `fetch` with `self` before writes. If it fails, direct the user to `codex mcp login notion` and leave local artifacts unchanged.

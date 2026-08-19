@@ -7,7 +7,7 @@ Find an exact-title `Job Applications` database before creating one. Create it p
 ```sql
 CREATE TABLE (
   "Application" TITLE,
-  "Status" SELECT('TO_APPLY':gray, 'APPLIED':blue, 'INTERVIEW':yellow, 'FINAL_INTERVIEW':orange, 'OFFER':green, 'REJECTED':red, 'WITHDRAWN':brown),
+  "Status" SELECT('TO_APPLY':gray, 'APPLIED':blue, 'REAPPLY':purple, 'INTERVIEW':yellow, 'FINAL_INTERVIEW':orange, 'OFFER':green, 'REJECTED':red, 'WITHDRAWN':brown),
   "Company" RICH_TEXT,
   "Role" RICH_TEXT,
   "Location" RICH_TEXT,
@@ -27,6 +27,11 @@ CREATE TABLE (
 
 Create a `Pipeline` board with `GROUP BY "Status"` and an `All Applications` table sorted by `Generated At` descending. Fetch the database to obtain its database and data-source IDs.
 
+`Generated At` records the generation time of the current bundle and is the
+sole age source for bundle-recency, generation-completeness, and stale-card
+requeue checks. `Applied At` records the actual submission time and must not be
+inferred from `Generated At` or used as a requeue fallback.
+
 ## Page content
 
 Keep sections named `Job Summary`, `Requirements`, `Match Analysis`, `Gaps`, and `Current Documents`. Read the Notion enhanced-Markdown resource before constructing content.
@@ -35,6 +40,7 @@ Keep sections named `Job Summary`, `Requirements`, `Match Analysis`, `Gaps`, and
 
 - New bundle: `TO_APPLY`.
 - First `APPLIED`: set `Applied At` to the supplied date or current date.
+- `REAPPLY`: set only from `APPLIED` by `$requeue-unanswered-applications` when the card's whole local-calendar age from `Generated At` is greater than or equal to the follow-up threshold, default `14` days, or by an explicit user request. A normal board review applies this transition automatically; an explicitly requested preview, audit, or dry run is read-only. Preserve `Generated At` and `Applied At`; update `Next Action At` only when supplied. A database created before this option existed lacks it; add only the missing option in place instead of recreating the database.
 - Interview stages: preserve `Applied At`; update `Next Action At` only when supplied.
 - `OFFER`, `REJECTED`, or `WITHDRAWN`: clear `Next Action At` unless explicitly supplied.
 - Permit corrections to earlier statuses without deleting history.

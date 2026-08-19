@@ -10,6 +10,7 @@ A shareable Codex plugin for evidence-backed job applications. It uses small, sp
 - `maintain-master-curriculum` maintains the approved candidate evidence library.
 - `tailor-application-bundle` writes, independently reviews, validates, and renders application documents.
 - `notion-track-application` deduplicates and tracks applications through Notion MCP.
+- `requeue-unanswered-applications` reviews the live board and automatically moves `APPLIED` cards to `REAPPLY` at the 14-day `Generated At` threshold.
 
 See [the complete job-application workflow](docs/job-application-workflow.md)
 for the execution order, agent responsibilities, validation scripts, expected

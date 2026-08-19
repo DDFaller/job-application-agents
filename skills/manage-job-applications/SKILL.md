@@ -1,6 +1,6 @@
 ---
 name: manage-job-applications
-description: Coordinate one or more job applications by delegating each operation to clean-context subagents that use the specialized extraction, curriculum, tailoring, and Notion skills in this plugin. Use when Codex needs to manage an application queue, prepare several applications, resume failed tracking, or decide which job-application worker skill should handle a request. Never submit applications or invent candidate facts.
+description: Coordinate one or more job applications by delegating each operation to clean-context subagents that use the specialized extraction, curriculum, tailoring, and Notion skills in this plugin. Use when Codex needs to manage an application queue, review the live Notion board, prepare several applications, resume failed tracking, or decide which job-application worker skill should handle a request. Never submit applications or invent candidate facts.
 ---
 
 # Manage Job Applications
@@ -22,7 +22,12 @@ Act as a thin coordinator. Delegate semantic job-application work; do not duplic
 - Opening extraction only: delegate `$extract-job-opening`.
 - Documents from an already validated opening: delegate `$tailor-application-bundle`.
 - Notion synchronization or status update only: delegate `$notion-track-application`.
+- Live board review or unanswered-application requeue/sweep: delegate `$requeue-unanswered-applications`; do not implement the threshold or status transition in the coordinator.
 - Existing Notion status-column backfill: query the live column, audit current artifacts, and delegate only noncompliant bundles through `$tailor-application-bundle` followed by `$notion-track-application`.
+
+## Review a live Notion board
+
+Delegate every live board review to `$requeue-unanswered-applications`. Its normal review mode automatically moves qualifying `APPLIED` cards to `REAPPLY` using `Generated At`; pass through an explicit preview, audit, dry-run, or threshold request unchanged. Never calculate eligibility from `Applied At` in the coordinator.
 
 ## Coordinate an application queue
 

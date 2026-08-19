@@ -4,6 +4,13 @@ This document describes what happens after a public job link is supplied to
 `$prepare-job-application`. It covers one opening only. The workflow prepares
 and tracks an application; it never submits the application.
 
+For unanswered applications, `$manage-job-applications` delegates to
+`$requeue-unanswered-applications`. That skill uses `Generated At` as the card
+age source for follow-up thresholds. `Applied At` remains the actual submission
+timestamp; the two timestamps must not be interchanged. A normal board review
+automatically moves `APPLIED` cards that are at least 14 whole local-calendar
+days old to `REAPPLY`; an explicit preview, audit, or dry run remains read-only.
+
 ## At a glance
 
 ```mermaid
