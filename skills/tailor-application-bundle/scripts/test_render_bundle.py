@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -143,6 +145,67 @@ class RenderBundleTests(unittest.TestCase):
         bundle = {"inputs": {"job_json": "/missing"}, "job": {"location": "Paris, Île-de-France"}}
         self.assertEqual(render_bundle.resolve_profile(bundle, "auto"), "france")
         self.assertEqual(render_bundle.resolve_profile(bundle, "international"), "international")
+
+    def test_promote_requires_and_embeds_exact_accepted_review(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            application_root = root / "application"
+            stage = application_root / ".staging" / "bundle-test"
+            stage.mkdir(parents=True)
+            job = root / "job.json"
+            evidence = root / "candidate.json"
+            bundle_path = root / "bundle.json"
+            review_path = root / "review.json"
+            job.write_text(json.dumps({"field_evidence": {}}), encoding="utf-8")
+            evidence.write_text(json.dumps({"facts": []}), encoding="utf-8")
+            job_hash = hashlib.sha256(job.read_bytes()).hexdigest()
+            evidence_hash = hashlib.sha256(evidence.read_bytes()).hexdigest()
+            bundle = {
+                "inputs": {
+                    "job_json": str(job), "job_sha256": job_hash,
+                    "candidate_evidence_json": str(evidence), "candidate_evidence_sha256": evidence_hash,
+                },
+            }
+            bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
+            (stage / "bundle.json").write_bytes(bundle_path.read_bytes())
+            for name in ("job.json", "candidate-evidence.json", "resume.pdf", "motivation-letter.pdf"):
+                (stage / name).write_text(name, encoding="utf-8")
+            artifacts = {
+                path.name: {"sha256": render_bundle.sha256(path), "bytes": path.stat().st_size}
+                for path in stage.iterdir()
+            }
+            render_bundle.atomic_json(stage / "staging-manifest.json", {
+                "schema_version": 1,
+                "application_root": str(application_root.resolve()),
+                "bundle_sha256": render_bundle.sha256(stage / "bundle.json"),
+                "job": {"company": "Example", "role": "Role", "canonical_url": "https://example.test"},
+                "inputs": bundle["inputs"],
+                "rendering": {"profile": "international"},
+                "quality": {"resume": {"pages": 1}, "motivation_letter": {"pages": 1}},
+                "artifacts": artifacts,
+            })
+            template = json.loads((Path(__file__).resolve().parent.parent / "references" / "tailoring-review-template.json").read_text(encoding="utf-8"))
+            template.update({
+                "inputs": {
+                    "job_json": str(job), "job_sha256": job_hash,
+                    "candidate_evidence_json": str(evidence), "candidate_evidence_sha256": evidence_hash,
+                    "bundle_json": str(bundle_path), "bundle_sha256": hashlib.sha256(bundle_path.read_bytes()).hexdigest(),
+                },
+                "checks": {key: True for key in template["checks"]},
+                "findings": [], "verdict": "accept", "reviewed_at": "2026-08-20T12:00:00+00:00",
+            })
+            review_path.write_text(json.dumps(template), encoding="utf-8")
+
+            self.assertFalse((application_root / "current.json").exists())
+            promoted = render_bundle.promote_bundle(
+                stage, review_path, application_root, Path(__file__).resolve().parent.parent
+            )
+            manifest = json.loads((promoted / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["schema_version"], 2)
+            self.assertEqual(manifest["semantic_review"]["verdict"], "accept")
+            self.assertNotIn("visual_inspection", manifest["quality_gate"])
+            self.assertTrue((promoted / "tailoring-review.json").is_file())
+            self.assertEqual(json.loads((application_root / "current.json").read_text())["version"], "v001")
 
 
 if __name__ == "__main__":

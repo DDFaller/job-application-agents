@@ -5,8 +5,11 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import fcntl
 import hashlib
+import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -389,6 +392,195 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def load_json_object(path: Path) -> dict[str, Any]:
+    value = json.loads(path.read_bytes().decode("utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"{path} must contain an object")
+    return value
+
+
+def load_skill_module(path: Path, name: str) -> Any:
+    spec = importlib.util.spec_from_file_location(name, path)
+    if not spec or not spec.loader:
+        raise RuntimeError(f"cannot load validator: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def verify_bundle_for_render(bundle_path: Path, skill_dir: Path) -> tuple[dict[str, Any], bytes, bytes, bytes]:
+    bundle_bytes = bundle_path.read_bytes()
+    bundle = json.loads(bundle_bytes.decode("utf-8"))
+    if not isinstance(bundle, dict):
+        raise ValueError(f"{bundle_path} must contain an object")
+    validate(bundle)
+    validator = load_skill_module(skill_dir / "scripts" / "validate_bundle.py", "tailor_validate_bundle")
+    template_path = skill_dir / "references" / "bundle-template.json"
+    errors = validator.validate(bundle, validator.load(template_path), bundle_path)
+    if errors:
+        raise ValueError("bundle is not structurally valid: " + "; ".join(errors))
+    inputs = bundle["inputs"]
+    job_path = Path(inputs["job_json"]).expanduser().resolve()
+    evidence_path = Path(inputs["candidate_evidence_json"]).expanduser().resolve()
+    job_bytes = job_path.read_bytes()
+    evidence_bytes = evidence_path.read_bytes()
+    if hashlib.sha256(job_bytes).hexdigest() != inputs["job_sha256"]:
+        raise ValueError("job input changed after bundle validation")
+    if hashlib.sha256(evidence_bytes).hexdigest() != inputs["candidate_evidence_sha256"]:
+        raise ValueError("candidate evidence changed after bundle validation")
+    return bundle, bundle_bytes, job_bytes, evidence_bytes
+
+
+def accepted_review(review_path: Path, staged_bundle: Path, skill_dir: Path) -> dict[str, Any]:
+    validator = load_skill_module(
+        skill_dir / "scripts" / "validate_tailoring_review.py",
+        "tailor_validate_review",
+    )
+    review = validator.load(review_path)
+    template = validator.load(skill_dir / "references" / "tailoring-review-template.json")
+    errors = validator.validate(review, template)
+    if errors:
+        raise ValueError("tailoring review is invalid: " + "; ".join(errors))
+    if review.get("verdict") != "accept":
+        raise ValueError("tailoring review verdict must be accept")
+    staged_hash = sha256(staged_bundle)
+    if review.get("inputs", {}).get("bundle_sha256") != staged_hash:
+        raise ValueError("tailoring review does not cover the staged bundle")
+    return review
+
+
+def atomic_json(path: Path, value: dict[str, Any]) -> None:
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    temporary.replace(path)
+
+
+def stage_bundle(args: argparse.Namespace, skill_dir: Path) -> Path:
+    bundle, bundle_bytes, job_bytes, evidence_bytes = verify_bundle_for_render(
+        args.bundle_json.expanduser().resolve(), skill_dir
+    )
+    job = json.loads(job_bytes.decode("utf-8"))
+    profile = resolve_profile(bundle, args.profile, job)
+    if args.photo and profile != "france":
+        raise ValueError("--photo is accepted only with the France profile")
+    photo = validate_photo(args.photo) if args.photo else (discover_approved_photo() if profile == "france" else None)
+    design, max_pages = profile_design(profile, photo is not None)
+    binary = rendercv_binary(skill_dir)
+    application_root = args.application_root.expanduser().resolve()
+    staging_root = application_root / ".staging"
+    staging_root.mkdir(parents=True, exist_ok=True)
+    stage_dir = Path(tempfile.mkdtemp(prefix="bundle-", dir=staging_root))
+    try:
+        photo_name = None
+        if photo:
+            photo_name = "profile-photo" + photo.suffix.lower()
+            shutil.copy2(photo, stage_dir / photo_name)
+        (stage_dir / "bundle.json").write_bytes(bundle_bytes)
+        (stage_dir / "job.json").write_bytes(job_bytes)
+        (stage_dir / "candidate-evidence.json").write_bytes(evidence_bytes)
+        (stage_dir / "resume.yaml").write_text(
+            "# Generated deterministically from bundle.json\n"
+            + "\n".join(yaml_dump(rendercv_document(bundle, profile, photo_name, job))) + "\n",
+            encoding="utf-8",
+        )
+        (stage_dir / "motivation-letter.md").write_text(letter_markdown(bundle), encoding="utf-8")
+        (stage_dir / "match-analysis.md").write_text(match_markdown(bundle), encoding="utf-8")
+        resume_quality = render_resume(binary, stage_dir / "resume.yaml", stage_dir, max_pages)
+        to_letter_pdf(letter_roff(bundle, args.style.read_text(encoding="utf-8")), stage_dir)
+        letter_quality = inspect_pdf(stage_dir / "motivation-letter.pdf", "motivation letter", 1)
+        artifacts = {
+            path.name: {"sha256": sha256(path), "bytes": path.stat().st_size}
+            for path in sorted(stage_dir.iterdir()) if path.is_file()
+        }
+        staging_manifest = {
+            "schema_version": 1,
+            "application_root": str(application_root),
+            "bundle_sha256": hashlib.sha256(bundle_bytes).hexdigest(),
+            "job": bundle["job"],
+            "inputs": bundle["inputs"],
+            "rendering": {
+                "resume_engine": "rendercv", "rendercv_version": RENDERCV_VERSION,
+                "profile": profile, "theme": design["theme"],
+                "page_size": design["page"]["size"], "max_pages": max_pages,
+                "photo": photo_name, "letter_engine": "groff",
+            },
+            "quality": {"resume": resume_quality, "motivation_letter": letter_quality},
+            "artifacts": artifacts,
+        }
+        atomic_json(stage_dir / "staging-manifest.json", staging_manifest)
+        return stage_dir
+    except Exception:
+        shutil.rmtree(stage_dir, ignore_errors=True)
+        raise
+
+
+def promote_bundle(stage_dir: Path, review_path: Path, application_root: Path, skill_dir: Path) -> Path:
+    stage_dir = stage_dir.expanduser().resolve()
+    application_root = application_root.expanduser().resolve()
+    expected_staging_root = application_root / ".staging"
+    if stage_dir.parent != expected_staging_root or not stage_dir.is_dir():
+        raise ValueError("staging directory must be an existing direct child of application-root/.staging")
+    staging = load_json_object(stage_dir / "staging-manifest.json")
+    if staging.get("application_root") != str(application_root):
+        raise ValueError("staging manifest belongs to a different application root")
+    for name, metadata in staging.get("artifacts", {}).items():
+        path = stage_dir / name
+        if not path.is_file() or sha256(path) != metadata.get("sha256") or path.stat().st_size != metadata.get("bytes"):
+            raise ValueError(f"staged artifact changed or is missing: {name}")
+    review = accepted_review(review_path.expanduser().resolve(), stage_dir / "bundle.json", skill_dir)
+    review_target = stage_dir / "tailoring-review.json"
+    review_target.write_bytes(review_path.expanduser().resolve().read_bytes())
+    artifacts = {
+        path.name: {"sha256": sha256(path), "bytes": path.stat().st_size}
+        for path in sorted(stage_dir.iterdir())
+        if path.is_file() and path.name not in {"staging-manifest.json", "manifest.json"}
+    }
+    application_root.mkdir(parents=True, exist_ok=True)
+    lock_path = application_root / ".version.lock"
+    with lock_path.open("a+", encoding="utf-8") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        versions = [
+            int(match.group(1)) for path in application_root.iterdir()
+            if path.is_dir() and (path / "manifest.json").is_file()
+            and (match := re.fullmatch(r"v(\d{3})", path.name))
+        ]
+        version = max(versions, default=0) + 1
+        out_dir = application_root / f"v{version:03d}"
+        if out_dir.exists():
+            raise RuntimeError(f"incomplete version directory already exists: {out_dir}")
+        manifest = {
+            "schema_version": 2,
+            "version": out_dir.name,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "job": staging["job"],
+            "inputs": staging["inputs"],
+            "input_snapshots": {"job_json": "job.json", "candidate_evidence_json": "candidate-evidence.json"},
+            "semantic_review": {
+                "verdict": "accept",
+                "snapshot": "tailoring-review.json",
+                "sha256": artifacts["tailoring-review.json"]["sha256"],
+                "bundle_sha256": review["inputs"]["bundle_sha256"],
+            },
+            "rendering": staging["rendering"],
+            "quality_gate": {
+                "automated": "passed", "semantic_review": "accepted",
+                "resume": staging["quality"]["resume"],
+                "motivation_letter": staging["quality"]["motivation_letter"],
+            },
+            "artifacts": artifacts,
+            "notion_page_url": None,
+        }
+        atomic_json(stage_dir / "manifest.json", manifest)
+        (stage_dir / "staging-manifest.json").unlink()
+        stage_dir.rename(out_dir)
+        atomic_json(application_root / "current.json", {
+            "version": manifest["version"],
+            "path": str(out_dir),
+            "manifest": str(out_dir / "manifest.json"),
+        })
+        return out_dir
+
+
 def main() -> int:
     skill_dir = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser()
@@ -397,6 +589,9 @@ def main() -> int:
     parser.add_argument("--style", type=Path, default=skill_dir / "assets" / "application.ms")
     parser.add_argument("--profile", choices=PROFILES, default="auto")
     parser.add_argument("--photo", type=Path, help="Explicitly approved local JPEG/PNG; France profile only")
+    parser.add_argument("--stage", action="store_true", help="render into non-published staging")
+    parser.add_argument("--promote", type=Path, metavar="STAGING_DIR", help="promote reviewed staging atomically")
+    parser.add_argument("--review-json", type=Path, help="accepted semantic review required for promotion")
     parser.add_argument("--preflight", action="store_true", help="check rendering tools without rendering a bundle")
     args = parser.parse_args()
     if args.preflight:
@@ -407,51 +602,21 @@ def main() -> int:
         except Exception as exc:
             print(f"render preflight failed: {exc}", file=sys.stderr)
             return 1
-    if not args.bundle_json or not args.application_root:
-        parser.error("--bundle-json and --application-root are required unless --preflight is used")
-    stage_dir: Path | None = None
+    if args.stage == bool(args.promote):
+        parser.error("choose exactly one of --stage or --promote unless --preflight is used")
+    if not args.application_root:
+        parser.error("--application-root is required")
+    if args.stage and not args.bundle_json:
+        parser.error("--bundle-json is required with --stage")
+    if args.promote and not args.review_json:
+        parser.error("--review-json is required with --promote")
     try:
-        bundle = json.loads(args.bundle_json.read_text(encoding="utf-8"))
-        validate(bundle)
-        job = load_job(bundle)
-        profile = resolve_profile(bundle, args.profile, job)
-        if args.photo and profile != "france":
-            raise ValueError("--photo is accepted only with the France profile")
-        photo = validate_photo(args.photo) if args.photo else (discover_approved_photo() if profile == "france" else None)
-        design, max_pages = profile_design(profile, photo is not None)
-        binary = rendercv_binary(skill_dir)
-        args.application_root.mkdir(parents=True, exist_ok=True)
-        versions = [int(m.group(1)) for p in args.application_root.iterdir() if p.is_dir() and (p / "manifest.json").is_file() and (m := re.fullmatch(r"v(\d{3})", p.name))]
-        version = max(versions, default=0) + 1
-        out_dir = args.application_root / f"v{version:03d}"
-        if out_dir.exists():
-            raise RuntimeError(f"incomplete version directory already exists: {out_dir}")
-        stage_dir = Path(tempfile.mkdtemp(prefix=f".v{version:03d}-", dir=args.application_root))
-        photo_name = None
-        if photo:
-            photo_name = "profile-photo" + photo.suffix.lower()
-            shutil.copy2(photo, stage_dir / photo_name)
-        (stage_dir / "bundle.json").write_text(json.dumps(bundle, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        shutil.copy2(Path(bundle["inputs"]["job_json"]), stage_dir / "job.json")
-        shutil.copy2(Path(bundle["inputs"]["candidate_evidence_json"]), stage_dir / "candidate-evidence.json")
-        (stage_dir / "resume.yaml").write_text("# Generated deterministically from bundle.json\n" + "\n".join(yaml_dump(rendercv_document(bundle, profile, photo_name, job))) + "\n", encoding="utf-8")
-        (stage_dir / "motivation-letter.md").write_text(letter_markdown(bundle), encoding="utf-8")
-        (stage_dir / "match-analysis.md").write_text(match_markdown(bundle), encoding="utf-8")
-        resume_quality = render_resume(binary, stage_dir / "resume.yaml", stage_dir, max_pages)
-        to_letter_pdf(letter_roff(bundle, args.style.read_text(encoding="utf-8")), stage_dir)
-        letter_quality = inspect_pdf(stage_dir / "motivation-letter.pdf", "motivation letter", 1)
-        artifacts = {p.name: {"sha256": sha256(p), "bytes": p.stat().st_size} for p in sorted(stage_dir.iterdir()) if p.is_file()}
-        manifest = {"schema_version": 1, "version": f"v{version:03d}", "generated_at": datetime.now(timezone.utc).isoformat(), "job": bundle["job"], "inputs": bundle["inputs"], "input_snapshots": {"job_json": "job.json", "candidate_evidence_json": "candidate-evidence.json"}, "rendering": {"resume_engine": "rendercv", "rendercv_version": RENDERCV_VERSION, "profile": profile, "theme": design["theme"], "page_size": design["page"]["size"], "max_pages": max_pages, "photo": photo_name, "letter_engine": "groff"}, "quality_gate": {"automated": "passed", "resume": resume_quality, "motivation_letter": letter_quality, "visual_inspection": "required", "reviewed_artifacts": ["resume.pdf", "motivation-letter.pdf", "match-analysis.md"]}, "artifacts": artifacts, "notion_page_url": None}
-        (stage_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        stage_dir.rename(out_dir)
-        stage_dir = None
-        current = {"version": manifest["version"], "path": str(out_dir.resolve()), "manifest": str((out_dir / "manifest.json").resolve())}
-        (args.application_root / "current.json").write_text(json.dumps(current, indent=2) + "\n", encoding="utf-8")
-        print(out_dir)
+        output = stage_bundle(args, skill_dir) if args.stage else promote_bundle(
+            args.promote, args.review_json, args.application_root, skill_dir
+        )
+        print(output)
         return 0
     except Exception as exc:
-        if stage_dir and stage_dir.exists():
-            shutil.rmtree(stage_dir, ignore_errors=True)
         print(f"render failed: {exc}", file=sys.stderr)
         return 1
 

@@ -15,7 +15,10 @@ from typing import Any
 
 
 STATUSES = {"complete", "partial", "blocked"}
-CATEGORIES = {"identity", "contact", "profile", "experience", "project", "education", "skill", "language"}
+CATEGORIES = {
+    "identity", "contact", "profile", "experience", "project", "education",
+    "certification", "skill", "language",
+}
 
 
 def load_bytes(data: bytes, path: Path) -> dict[str, Any]:

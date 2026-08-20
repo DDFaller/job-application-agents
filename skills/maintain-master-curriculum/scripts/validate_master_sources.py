@@ -19,6 +19,7 @@ FILE_PREFIXES = {
     "certifications.md": "CERT",
 }
 PROFILE_PHOTOS = {"profile-photo.jpg", "profile-photo.jpeg", "profile-photo.png"}
+MANIFEST_FILES = {"current.json"}
 FACT_RE = re.compile(r"^- \[(MC-([A-Z]+)-\d{3,})\]\s+(.+\S)$")
 PLACEHOLDER_RE = re.compile(
     r"(?:<!--|\bTODO\b|\bTBD\b|Example Candidate|candidate@example\.invalid|linkedin\.com/in/example)",
@@ -63,7 +64,7 @@ def read_facts(source_dir: Path, allow_missing: bool = False) -> tuple[list[str]
             valid = signature == b"\x89PNG\r\n\x1a\n" if entry.suffix == ".png" else signature.startswith(b"\xff\xd8\xff")
             if not valid:
                 errors.append(f"profile photo contents do not match its extension: {entry.name}")
-        elif entry.name not in FILE_PREFIXES:
+        elif entry.name not in FILE_PREFIXES and entry.name not in MANIFEST_FILES:
             errors.append(f"unexpected source file: {entry.name}")
     photos = [entry.name for entry in entries if entry.name in PROFILE_PHOTOS]
     if len(photos) > 1:

@@ -3,6 +3,11 @@ name: extract-job-opening
 description: Delegate retrieval and semantic extraction of one public LinkedIn, employer, or ATS job opening—or pasted job text—to a clean-context Luna sub-agent, then validate its evidence-backed JSON. Use before matching a candidate, tailoring application documents, or tracking an application. Do not use for bulk scraping, authenticated pages, or automatic submission.
 ---
 
+When called from `$prepare-job-application`, append timing events to the
+provided ledger for retrieval, normalization, validation, and the single
+repair pass. Preserve the ledger path as an orchestration input; it is not job
+evidence and must not be copied into `job.json`.
+
 # Extract Job Opening
 
 Delegate one opening to a fresh extraction agent. Do not parse page markup or infer job fields in deterministic scripts.

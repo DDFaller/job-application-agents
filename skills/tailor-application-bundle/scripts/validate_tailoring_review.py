@@ -19,6 +19,11 @@ def load_bytes(data: bytes, path: Path) -> dict[str, Any]:
     return value
 
 
+def load(path: Path) -> dict[str, Any]:
+    """Load one JSON object from *path* for the public CLI."""
+    return load_bytes(path.read_bytes(), path)
+
+
 def digest(path: Path) -> str:
     value = hashlib.sha256()
     with path.open("rb") as handle:
@@ -62,6 +67,25 @@ def validate(review: dict[str, Any], template: dict[str, Any]) -> list[str]:
             errors.append(f"cannot verify {path_key}: {exc}")
     if set(artifacts) != {"job_json", "candidate_evidence_json", "bundle_json"}:
         return errors
+
+    bundle_inputs = artifacts["bundle_json"].get("inputs")
+    if not isinstance(bundle_inputs, dict):
+        errors.append("bundle inputs are missing or invalid")
+    else:
+        for path_key, hash_key in (
+            ("job_json", "job_sha256"),
+            ("candidate_evidence_json", "candidate_evidence_sha256"),
+        ):
+            try:
+                review_path = str(Path(inputs[path_key]).expanduser().resolve())
+                bundle_path = str(Path(bundle_inputs[path_key]).expanduser().resolve())
+            except (KeyError, TypeError, ValueError):
+                errors.append(f"bundle {path_key} input is missing or invalid")
+                continue
+            if review_path != bundle_path:
+                errors.append(f"review {path_key} does not match the bundle input path")
+            if inputs.get(hash_key) != bundle_inputs.get(hash_key):
+                errors.append(f"review {hash_key} does not match the bundle input hash")
 
     checks = review.get("checks")
     if not isinstance(checks, dict) or set(checks) != set(template["checks"]):
@@ -129,7 +153,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         errors = validate(load(args.review), load(args.template))
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
         print(f"validation failed: {exc}", file=sys.stderr)
         return 1
     if errors:

@@ -10,7 +10,10 @@ Maintain a curated, quote-friendly evidence library. Treat approved direct user 
 ## Resolve paths and contracts
 
 - Default the canonical source directory to `~/Documents/job-search/sources`.
-- Default state, immutable versions, and audits to `~/Documents/job-search/master-curriculum`.
+- Keep the canonical source folder at `~/Documents/job-search/sources`; its
+  `current.json` is the only hot-path retrieval pointer. Historical versions,
+  reviews, and audits remain optional archival data under
+  `~/Documents/job-search/master-curriculum`.
 - Read `references/source-layout.md` before proposing or auditing sources.
 - Resolve the installed `$tailor-application-bundle` skill and read its `SKILL.md`, `references/candidate-evidence-template.json`, and candidate-evidence validator before work. Treat those live resources as authoritative; do not reproduce their schema.
 - Keep imported originals and generated application resumes outside the canonical source directory. Never import content under an `applications/` or `mock/` directory automatically.
@@ -49,6 +52,19 @@ The script reruns both validators, rejects non-accepted or stale reviews, create
 4. Write `readiness.json` using `references/readiness-template.json`. Cite concise questions for gaps instead of inventing answers.
 5. Run `scripts/validate_readiness.py --report <readiness.json>`. Accept only exit `0`, then copy the report to `<state-root>/readiness-current.json` and preserve the audit-specific copy.
 6. Return the source version, readiness status, hard blockers, quality gaps, candidate-evidence path, and readiness-report path.
+
+## Publish the retrieval contract
+
+The normal retrieval contract is `sources/current.json`. It contains the
+canonical Markdown filenames and hashes. Consumers run
+`scripts/resolve_current.py --source-dir <sources>` and then read those
+Markdown files directly, citing exact headings and quotations. A per-run
+candidate-evidence JSON may be derived from the Markdown for bundle-schema
+compatibility, but it is never a second source of truth and is not required in
+the master-curriculum state directory.
+
+`publish_readiness.py` remains an optional archival audit publisher. Its output
+must not gate ordinary application retrieval.
 
 ## Safety invariants
 

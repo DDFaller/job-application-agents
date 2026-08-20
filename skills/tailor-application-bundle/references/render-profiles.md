@@ -6,7 +6,7 @@ Use `--profile auto|international|france`; `auto` is the default.
 - `france` uses the official Classic theme, A4 paper, left-aligned header, and a one-page maximum. A photo is optional.
 - `auto` selects `france` only when the normalized job location clearly identifies France or a recognized French city; otherwise it selects `international`. Pass an explicit profile when geography is ambiguous.
 
-Every profile targets one visually balanced page. After the first accepted render, inspect page fill semantically. If the page is conspicuously underfilled, make at most one evidence-preserving expansion: add relevant work experience first, then relevant education, then relevant languages/certifications, then other relevant supported content. Revalidate and independently review any revised bundle before rendering a new immutable version. Do not stretch prose, enlarge spacing, add irrelevant history, or invent facts to fill the page; a sparse page is valid when the evidence library has no additional relevant experience, education, or baseline context.
+Every profile has a hard one-page maximum enforced with `pdfinfo`; generated PDFs must also contain extractable text. Page-fill visual inspection is intentionally out of scope. Do not stretch prose, enlarge spacing, add irrelevant history, or invent facts to fill the page.
 
 ## Photo provenance
 
@@ -17,6 +17,7 @@ The renderer validates the extension and file signature, limits the source to 10
 Examples:
 
 ```bash
-scripts/render_bundle.py --bundle-json bundle.json --application-root applications/acme/role/id --profile auto
-scripts/render_bundle.py --bundle-json bundle.json --application-root applications/acme/role/id --profile france --photo ~/Documents/job-search/sources/profile-photo.jpg
+scripts/render_bundle.py --stage --bundle-json bundle.json --application-root applications/acme/role/id --profile auto
+scripts/render_bundle.py --stage --bundle-json bundle.json --application-root applications/acme/role/id --profile france --photo ~/Documents/job-search/sources/profile-photo.jpg
+scripts/render_bundle.py --promote applications/acme/role/id/.staging/bundle-abc123 --review-json tailoring-review.json --application-root applications/acme/role/id
 ```

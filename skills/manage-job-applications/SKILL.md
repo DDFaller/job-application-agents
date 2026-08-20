@@ -7,6 +7,28 @@ description: Coordinate one or more job applications by delegating each operatio
 
 Act as a thin coordinator. Delegate semantic job-application work; do not duplicate the worker skills or perform worker stages in the parent session when subagent delegation is available.
 
+## Timing ledger
+
+For every queue item, initialize one local timing ledger before delegation with
+`skills/manage-job-applications/scripts/workflow_timing.py`. Store it under
+`~/Documents/job-search/applications/.workflow-runs/<run-id>.json`; this path is
+local history and must never be committed to the plugin repository. Pass the
+ledger path and run ID to every worker. Start and finish an event for each
+coordinator or worker stage, including retries and waits. Use `kind: wait` for
+missing-input, authentication, or approval pauses so waiting time is reported
+separately from active processing time. Finalize the ledger for prepared,
+needs-input, failed, and cancelled outcomes.
+
+Workers must create timestamps through `workflow_timing.py`; they must not
+hand-author event times or copy events from another run. Before returning a
+report, run `workflow_timing.py validate --file <ledger>`. If validation
+fails, aggregate durations are untrusted and the run is a timing failure.
+
+The final response must include end-to-end elapsed time, active elapsed time,
+wait time, and a chronological event table. Mention `parallel_group` values
+when stages overlap; do not add concurrent durations together when calculating
+active elapsed time. Only the coordinator may finalize the ledger.
+
 ## Delegate first and in parallel
 
 - Keep the parent session dedicated to routing, concurrency control, result collection, retries, and the final summary.
@@ -33,17 +55,25 @@ Delegate every live board review to `$requeue-unanswered-applications`. Its norm
 
 1. Normalize each item to a public URL or pasted description and assign a stable queue label. Do not retrieve authenticated or private postings.
 2. Check that the canonical curriculum exists and is ready. If it needs changes, run one curriculum-maintenance delegation first and stop for the user's explicit approval before committing those changes.
-3. For every ready item, prepare a clean-context subagent task with `fork_turns: none`. Tell it to use `$prepare-job-application`, provide only that opening and the resolved local roots, and require a concise result containing status, artifact directory, Notion URL, and blockers.
+   Before routing a complete application, run the master-curriculum source
+   resolver against `sources/current.json`. It verifies the live Markdown
+   hashes. Pass the resolved source directory and manifest to the worker; do
+   not require a state-root readiness report, receipt, or generated profile.
+3. For every ready item, prepare a clean-context subagent task with `fork_turns: none`. Tell it to use `$prepare-job-application`, provide the opening, resolved source manifest and Markdown directory, and require a concise result containing status, artifact directory, Notion URL, and blockers.
 4. Spawn the largest safe batch of independent application workers concurrently before waiting. Keep the parent agent free to coordinate results and reserve capacity for the nested extraction and review agents required by `$prepare-job-application`. As workers finish, immediately fill available slots from the remaining queue. Use a single-worker batch only when the actual concurrency limit or a dependency requires it.
 5. Retry only the failed stage. If Notion synchronization fails after local success, delegate `$notion-track-application` using the existing manifest; never regenerate accepted documents just to retry tracking.
+   If candidate-evidence mapping fails, retry only that mapping stage with a
+   fresh attempt number and staging directory. Revalidate the resulting
+   per-run index against the Markdown manifest before opening tailoring. Never
+   tailor from a provisional or unvalidated index.
 6. Return a compact queue summary with `prepared`, `needs input`, or `failed` for every item and the corresponding artifact or blocker.
 
 ## Backfill a live Notion queue
 
 1. Query the user's exact requested status from the live Notion database; do not rely on local assumptions.
-2. Resolve every card's `Local Bundle Path` and inspect its current immutable résumé before delegating changes.
-3. Leave compliant cards unchanged. For each noncompliant card, reuse its validated job and candidate-evidence inputs and delegate a fresh bundle revision. Preserve evidence partitioning, independent review, rendering, and visual-inspection gates.
-4. Apply one-page remediation according to `$tailor-application-bundle`: reduce overlong résumés; expand conspicuously underfilled résumés with relevant experience first, then education, then other relevant evidence. Never pad.
+2. Resolve every card's `Local Bundle Path` and audit its manifest, review receipt, and deterministic page/text quality results before delegating changes.
+3. Leave compliant cards unchanged. For each noncompliant card, reuse its validated job and candidate-evidence inputs and delegate a fresh bundle revision. Preserve evidence partitioning, independent review, staged rendering, and review-gated promotion.
+4. Apply one-page remediation according to `$tailor-application-bundle`: reduce résumés that fail the one-page deterministic gate. Never pad.
 5. Create a new immutable version, then delegate a deduplicated Notion update that replaces only `Current Documents` and version metadata while preserving status and unrelated page content.
 6. Verify the live queue again and report changed, unchanged, and blocked cards separately.
 

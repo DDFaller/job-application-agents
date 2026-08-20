@@ -17,6 +17,7 @@ from typing import Any
 from validate_additions_review import load as load_review
 from validate_additions_review import validate as validate_review
 from validate_master_sources import read_facts, source_hashes
+from source_manifest import manifest_for
 
 
 def digest(path: Path) -> str:
@@ -177,12 +178,17 @@ def main() -> int:
             os.replace(source, archived_prior)
         os.replace(current_tmp, source)
         installed = True
+        # The canonical retrieval contract lives beside the Markdown sources.
+        # Keep the state-root pointer only as a legacy compatibility record.
+        source_manifest = manifest_for(source, version)
+        source_manifest["updated_at"] = created_at
+        write_json_atomic(source / "current.json", source_manifest)
         current = {
-            "schema_version": 1,
+            "schema_version": 2,
             "version": version,
-            "version_dir": str(version_dir),
             "source_dir": str(source),
             "source_hashes": source_hashes(source),
+            "manifest": str(source / "current.json"),
             "updated_at": created_at,
         }
         write_json_atomic(state / "current.json", current)

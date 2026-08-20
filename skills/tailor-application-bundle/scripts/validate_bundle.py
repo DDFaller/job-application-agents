@@ -34,6 +34,11 @@ def load_bytes(data: bytes, path: Path) -> dict[str, Any]:
     return value
 
 
+def load(path: Path) -> dict[str, Any]:
+    """Load one JSON object from *path* for the public CLI."""
+    return load_bytes(path.read_bytes(), path)
+
+
 def digest(path: Path) -> str:
     value = hashlib.sha256()
     with path.open("rb") as handle:
@@ -334,7 +339,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         errors = validate(load(args.bundle), load(args.template), args.bundle)
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
         print(f"validation failed: {exc}", file=sys.stderr)
         return 1
     if errors:

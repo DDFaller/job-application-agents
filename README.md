@@ -11,6 +11,9 @@ A shareable Codex plugin for evidence-backed job applications. It uses small, sp
 - `tailor-application-bundle` writes, independently reviews, validates, and renders application documents.
 - `notion-track-application` deduplicates and tracks applications through Notion MCP.
 - `requeue-unanswered-applications` reviews the live board and automatically moves `APPLIED` cards to `REAPPLY` at the 14-day `Generated At` threshold.
+- Managed runs keep a local, stage-level timing ledger under
+  `~/Documents/job-search/applications/.workflow-runs/`, including retries,
+  parallel branches, and separate blocked/wait time.
 
 See [the complete job-application workflow](docs/job-application-workflow.md)
 for the execution order, agent responsibilities, validation scripts, expected
