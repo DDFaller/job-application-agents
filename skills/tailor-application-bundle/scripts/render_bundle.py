@@ -20,6 +20,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 RENDERCV_VERSION = "2.8"
+LATEX_ENGINES = ("rendercv", "latex")
 SUBPROCESS_TIMEOUT_SECONDS = 60
 PROFILES = ("auto", "international", "france")
 FRANCE_LOCATION_TOKENS = {
@@ -325,6 +326,210 @@ def to_letter_pdf(document: str, out_dir: Path) -> None:
         raise RuntimeError(gs.stderr.decode(errors="replace").strip())
 
 
+LATEX_SPECIAL_CHARS = str.maketrans({
+    "&": r"\&", "%": r"\%", "$": r"\$", "#": r"\#",
+    "_": r"\_", "{": r"\{", "}": r"\}",
+})
+
+
+def latex_escape(text: object) -> str:
+    return str(text or "").translate(LATEX_SPECIAL_CHARS)
+
+
+def _latex_preamble(skill_dir: Path) -> str:
+    path = skill_dir / "assets" / "latex" / "preamble.tex"
+    if not path.is_file():
+        raise RuntimeError(f"LaTeX preamble not found: {path}")
+    return path.read_text(encoding="utf-8")
+
+
+def latex_cv_document(
+    bundle: dict[str, Any],
+    profile: str = "international",
+    photo_name: str | None = None,
+    job: dict[str, Any] | None = None,
+    skill_dir: Path | None = None,
+) -> str:
+    if skill_dir is None:
+        skill_dir = Path(__file__).resolve().parent.parent
+    candidate = bundle["candidate"]
+    name = latex_escape(candidate["name"])
+    headline = latex_escape(candidate.get("headline", ""))
+    location = latex_escape(candidate.get("location", ""))
+    photo_cmd = ""
+    photo_env = ""
+    if photo_name and profile == "france":
+        photo_cmd = "\\includegraphics[width=2.8cm]{" + photo_name + "}"
+        photo_env = "\\begin{minipage}[t]{0.22\\textwidth}\\vspace{0pt}" + photo_cmd + "\\end{minipage}\\hfill"
+    contact_parts: list[str] = []
+    for item in candidate.get("contact", []):
+        contact_parts.append(latex_escape(item))
+    contact_line = " \\textbar\\ ".join(contact_parts) if contact_parts else ""
+    summary = latex_escape(text_of(candidate.get("summary", "")))
+    sections_tex: list[str] = []
+    for section in bundle["resume_sections"]:
+        title = latex_escape(section["title"])
+        sections_tex.append(f"\\section{{{title}}}")
+        for item in section["items"]:
+            kind = item["type"]
+            if kind == "experience":
+                company = latex_escape(item["company"])
+                position = latex_escape(item["position"])
+                dates = latex_escape(item.get("dates", ""))
+                loc = latex_escape(item.get("location", ""))
+                summary_text = latex_escape(item.get("summary", ""))
+                sections_tex.append(f"\\noindent\\textbf{{{company}}} \\hfill \\textit{{{dates}}} \\\\")
+                sections_tex.append(f"\\noindent\\textit{{{position}}} \\hfill \\textit{{{loc}}} \\\\")
+                if summary_text:
+                    sections_tex.append(f"\\noindent {summary_text} \\\\")
+                highlights = [text_of(x) for x in item.get("highlights", [])]
+                if highlights:
+                    sections_tex.append("\\begin{itemize}")
+                    for h in highlights:
+                        sections_tex.append(f"  \\item {latex_escape(h)}")
+                    sections_tex.append("\\end{itemize}")
+                sections_tex.append("")
+            elif kind == "education":
+                institution = latex_escape(item["institution"])
+                area = latex_escape(item.get("area", ""))
+                degree = latex_escape(item.get("degree", ""))
+                dates = latex_escape(item.get("dates", ""))
+                loc = latex_escape(item.get("location", ""))
+                gpa = latex_escape(item.get("summary", ""))
+                sections_tex.append(f"\\noindent\\textbf{{{institution}}} \\hfill \\textit{{{dates}}} \\\\")
+                parts = [p for p in (degree, area) if p]
+                sections_tex.append(f"\\noindent\\textit{{{' -- '.join(parts)}}} \\hfill \\textit{{{loc}}} \\\\")
+                if gpa:
+                    sections_tex.append(f"\\noindent {gpa} \\\\")
+                sections_tex.append("")
+            elif kind == "one_line":
+                label = latex_escape(item["label"])
+                details = latex_escape(item["details"])
+                sections_tex.append(f"\\noindent\\textbf{{{label}:}} {details} \\\\")
+                sections_tex.append("")
+            elif kind == "publication":
+                title = latex_escape(item["title"])
+                authors = latex_escape(", ".join(item["authors"]))
+                journal = latex_escape(item.get("journal", ""))
+                dates = latex_escape(item.get("dates", ""))
+                sections_tex.append(f"\\noindent\\textbf{{{title}}} \\\\")
+                sections_tex.append(f"\\noindent {authors} \\\\")
+                if journal:
+                    sections_tex.append(f"\\noindent \\textit{{{journal}}} {dates} \\\\")
+                sections_tex.append("")
+            else:
+                text = latex_escape(item.get("text", ""))
+                sections_tex.append(f"\\noindent {text} \\\\")
+                sections_tex.append("")
+    photo_header = ""
+    if photo_env:
+        photo_header = photo_env + "\\begin{minipage}[t]{0.74\\textwidth}\\vspace{0pt}"
+    footer_close = "\\end{minipage}" if photo_env else ""
+    contact_display = f"\\\\{contact_line}" if contact_line else ""
+    document = f"""{_latex_preamble(skill_dir)}
+
+\\begin{{document}}
+
+{photo_header}\\begin{{center}}
+  {{\\LARGE \\textbf{{{name}}}}}\\\\[4pt]
+  {{\\large {headline}}}\\\\[2pt]
+  {{{location}{contact_display}}}
+\\end{{center}}{footer_close}
+
+\\section{{Profile}}
+{summary}
+
+{chr(10).join(sections_tex)}
+
+\\end{{document}}
+"""
+    return document
+
+
+def latex_letter_document(
+    bundle: dict[str, Any],
+    skill_dir: Path | None = None,
+) -> str:
+    if skill_dir is None:
+        skill_dir = Path(__file__).resolve().parent.parent
+    letter = bundle["motivation_letter"]
+    candidate_name = latex_escape(bundle["candidate"]["name"])
+    date = latex_escape(letter.get("date", ""))
+    recipient = latex_escape(letter.get("recipient", ""))
+    subject = latex_escape(letter.get("subject", ""))
+    salutation = latex_escape(letter.get("salutation", "Dear Hiring Team,"))
+    closing = latex_escape(letter.get("closing", "Sincerely,"))
+    signature = latex_escape(letter.get("signature", bundle["candidate"]["name"]))
+    paragraphs = []
+    for p in letter["paragraphs"]:
+        paragraphs.append(f"\\noindent {latex_escape(text_of(p))} \\par")
+    body = "\n\n".join(paragraphs)
+    return f"""{_latex_preamble(skill_dir)}
+
+\\begin{{document}}
+
+\\hfill {date}
+
+\\vspace{{1em}}
+
+{recipient}
+
+\\vspace{{1em}}
+
+\\noindent\\textbf{{{subject}}}
+
+\\vspace{{1em}}
+
+{salutation}
+
+\\vspace{{0.5em}}
+
+{body}
+
+\\vspace{{1em}}
+
+{closing}
+
+\\vspace{{0.5em}}
+
+{signature}
+
+\\end{{document}}
+"""
+
+
+def render_resume_latex(tex_path: Path, out_dir: Path, max_pages: int) -> dict[str, int]:
+    xelatex = shutil.which("xelatex")
+    if not xelatex:
+        raise RuntimeError("xelatex is required for LaTeX resume rendering")
+    for _pass in range(2):
+        result = subprocess.run(
+            [xelatex, "-interaction=nonstopmode", "-output-directory", str(out_dir), str(tex_path)],
+            cwd=out_dir, text=True, capture_output=True, timeout=SUBPROCESS_TIMEOUT_SECONDS,
+        )
+        if result.returncode:
+            raise RuntimeError("xelatex failed: " + (result.stderr.strip() or result.stdout.strip()[-500:]))
+    return inspect_pdf(out_dir / "resume.pdf", "resume", max_pages)
+
+
+def to_letter_pdf_latex(tex_path: Path, out_dir: Path) -> dict[str, int]:
+    xelatex = shutil.which("xelatex")
+    if not xelatex:
+        raise RuntimeError("xelatex is required for LaTeX letter rendering")
+    for _pass in range(2):
+        result = subprocess.run(
+            [xelatex, "-interaction=nonstopmode", "-output-directory", str(out_dir), str(tex_path)],
+            cwd=out_dir, text=True, capture_output=True, timeout=SUBPROCESS_TIMEOUT_SECONDS,
+        )
+        if result.returncode:
+            raise RuntimeError("xelatex failed: " + (result.stderr.strip() or result.stdout.strip()[-500:]))
+    src = out_dir / (tex_path.stem + ".pdf")
+    dst = out_dir / "motivation-letter.pdf"
+    if src != dst and src.is_file():
+        src.rename(dst)
+    return inspect_pdf(dst, "motivation letter", 1)
+
+
 def rendercv_binary(skill_dir: Path) -> Path:
     binary = skill_dir / ".venv" / "bin" / "rendercv"
     if not binary.is_file():
@@ -377,9 +582,15 @@ def inspect_pdf(path: Path, label: str, max_pages: int) -> dict[str, int]:
     return {"pages": pages, "text_chars": text_chars}
 
 
-def preflight_rendering(skill_dir: Path) -> None:
-    rendercv_binary(skill_dir)
-    missing = [tool for tool in ("groff", "ps2pdf", "pdfinfo", "pdftotext") if not shutil.which(tool)]
+def preflight_rendering(skill_dir: Path, engine: str = "rendercv") -> None:
+    missing: list[str] = []
+    if engine == "latex":
+        if not shutil.which("xelatex"):
+            missing.append("xelatex")
+    else:
+        rendercv_binary(skill_dir)
+        missing.extend(tool for tool in ("groff", "ps2pdf") if not shutil.which(tool))
+    missing.extend(tool for tool in ("pdfinfo", "pdftotext") if not shutil.which(tool))
     if missing:
         raise RuntimeError("required rendering tools are missing: " + ", ".join(missing))
 
@@ -461,11 +672,13 @@ def stage_bundle(args: argparse.Namespace, skill_dir: Path) -> Path:
     )
     job = json.loads(job_bytes.decode("utf-8"))
     profile = resolve_profile(bundle, args.profile, job)
+    engine = getattr(args, "render_engine", "rendercv")
     if args.photo and profile != "france":
         raise ValueError("--photo is accepted only with the France profile")
     photo = validate_photo(args.photo) if args.photo else (discover_approved_photo() if profile == "france" else None)
     design, max_pages = profile_design(profile, photo is not None)
-    binary = rendercv_binary(skill_dir)
+    if engine == "rendercv":
+        binary = rendercv_binary(skill_dir)
     application_root = args.application_root.expanduser().resolve()
     staging_root = application_root / ".staging"
     staging_root.mkdir(parents=True, exist_ok=True)
@@ -478,16 +691,39 @@ def stage_bundle(args: argparse.Namespace, skill_dir: Path) -> Path:
         (stage_dir / "bundle.json").write_bytes(bundle_bytes)
         (stage_dir / "job.json").write_bytes(job_bytes)
         (stage_dir / "candidate-evidence.json").write_bytes(evidence_bytes)
-        (stage_dir / "resume.yaml").write_text(
-            "# Generated deterministically from bundle.json\n"
-            + "\n".join(yaml_dump(rendercv_document(bundle, profile, photo_name, job))) + "\n",
-            encoding="utf-8",
-        )
         (stage_dir / "motivation-letter.md").write_text(letter_markdown(bundle), encoding="utf-8")
         (stage_dir / "match-analysis.md").write_text(match_markdown(bundle), encoding="utf-8")
-        resume_quality = render_resume(binary, stage_dir / "resume.yaml", stage_dir, max_pages)
-        to_letter_pdf(letter_roff(bundle, args.style.read_text(encoding="utf-8")), stage_dir)
-        letter_quality = inspect_pdf(stage_dir / "motivation-letter.pdf", "motivation letter", 1)
+        if engine == "latex":
+            (stage_dir / "resume.tex").write_text(
+                latex_cv_document(bundle, profile, photo_name, job, skill_dir),
+                encoding="utf-8",
+            )
+            (stage_dir / "letter.tex").write_text(
+                latex_letter_document(bundle, skill_dir),
+                encoding="utf-8",
+            )
+            resume_quality = render_resume_latex(stage_dir / "resume.tex", stage_dir, max_pages)
+            letter_quality = to_letter_pdf_latex(stage_dir / "letter.tex", stage_dir)
+            rendering = {
+                "resume_engine": "latex", "profile": profile,
+                "page_size": design["page"]["size"], "max_pages": max_pages,
+                "photo": photo_name, "letter_engine": "latex",
+            }
+        else:
+            (stage_dir / "resume.yaml").write_text(
+                "# Generated deterministically from bundle.json\n"
+                + "\n".join(yaml_dump(rendercv_document(bundle, profile, photo_name, job))) + "\n",
+                encoding="utf-8",
+            )
+            resume_quality = render_resume(binary, stage_dir / "resume.yaml", stage_dir, max_pages)
+            to_letter_pdf(letter_roff(bundle, args.style.read_text(encoding="utf-8")), stage_dir)
+            letter_quality = inspect_pdf(stage_dir / "motivation-letter.pdf", "motivation letter", 1)
+            rendering = {
+                "resume_engine": "rendercv", "rendercv_version": RENDERCV_VERSION,
+                "profile": profile, "theme": design["theme"],
+                "page_size": design["page"]["size"], "max_pages": max_pages,
+                "photo": photo_name, "letter_engine": "groff",
+            }
         artifacts = {
             path.name: {"sha256": sha256(path), "bytes": path.stat().st_size}
             for path in sorted(stage_dir.iterdir()) if path.is_file()
@@ -498,12 +734,7 @@ def stage_bundle(args: argparse.Namespace, skill_dir: Path) -> Path:
             "bundle_sha256": hashlib.sha256(bundle_bytes).hexdigest(),
             "job": bundle["job"],
             "inputs": bundle["inputs"],
-            "rendering": {
-                "resume_engine": "rendercv", "rendercv_version": RENDERCV_VERSION,
-                "profile": profile, "theme": design["theme"],
-                "page_size": design["page"]["size"], "max_pages": max_pages,
-                "photo": photo_name, "letter_engine": "groff",
-            },
+            "rendering": rendering,
             "quality": {"resume": resume_quality, "motivation_letter": letter_quality},
             "artifacts": artifacts,
         }
@@ -589,6 +820,7 @@ def main() -> int:
     parser.add_argument("--style", type=Path, default=skill_dir / "assets" / "application.ms")
     parser.add_argument("--profile", choices=PROFILES, default="auto")
     parser.add_argument("--photo", type=Path, help="Explicitly approved local JPEG/PNG; France profile only")
+    parser.add_argument("--render-engine", choices=LATEX_ENGINES, default="rendercv", help="CV rendering engine (default: rendercv)")
     parser.add_argument("--stage", action="store_true", help="render into non-published staging")
     parser.add_argument("--promote", type=Path, metavar="STAGING_DIR", help="promote reviewed staging atomically")
     parser.add_argument("--review-json", type=Path, help="accepted semantic review required for promotion")
@@ -596,7 +828,7 @@ def main() -> int:
     args = parser.parse_args()
     if args.preflight:
         try:
-            preflight_rendering(skill_dir)
+            preflight_rendering(skill_dir, getattr(args, "render_engine", "rendercv"))
             print("rendering tools ready")
             return 0
         except Exception as exc:

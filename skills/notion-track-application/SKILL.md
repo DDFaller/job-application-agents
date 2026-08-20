@@ -30,7 +30,7 @@ Its normal review mode may change only qualifying `APPLIED` statuses to
 3. Fetch the database before every create or update. Use its exact data-source ID and property names.
 4. Deduplicate with a parameterized data-source query: canonical `Job URL`, then `Source Job ID` plus company and role.
 5. Create or update the page only after the local bundle and manifest exist. For new schema-2 manifests, require `semantic_review.verdict: accept`, an accepted semantic-review quality gate, and matching review/bundle hashes. Existing schema-1 immutable bundles remain eligible only for synchronization retry.
-6. Create upload targets for the current resume and motivation-letter PDFs first. Send the two independent multipart POSTs concurrently, then use both returned attachment Markdown values in the page. Keep the page mutation and post-mutation verification sequential.
+6. Create upload targets for the current resume and motivation-letter PDFs first. If `.tex` source files exist in the versioned directory (from `--render-engine latex`), also create upload targets for `resume.tex` and `letter.tex`. Send all multipart POSTs concurrently, then use all returned attachment Markdown values in the page. Keep the page mutation and post-mutation verification sequential.
 7. Preserve unrelated page content. Replace only the stable `Current Documents` section when regenerating.
 8. Apply the status/date rules in the reference and fetch the page after mutation to verify it.
 
