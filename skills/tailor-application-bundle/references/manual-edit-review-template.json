@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "version_directory": "",
+  "document_revision": 0,
+  "inputs": {
+    "job_json": "",
+    "job_sha256": "",
+    "candidate_evidence_json": "",
+    "candidate_evidence_sha256": ""
+  },
+  "document_text_sha256": {
+    "resume.pdf": "",
+    "motivation-letter.pdf": ""
+  },
+  "checks": {
+    "claims_supported": false,
+    "job_alignment_preserved": false,
+    "candidate_identity_preserved": false,
+    "unsupported_claims_absent": false,
+    "documents_coherent": false
+  },
+  "findings": [],
+  "verdict": "revise",
+  "reviewed_at": ""
+}

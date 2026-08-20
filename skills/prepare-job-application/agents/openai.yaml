@@ -1,7 +1,7 @@
 interface:
   display_name: "Prepare Job Application"
-  short_description: "Prepare and review any job application"
-  default_prompt: "Use $prepare-job-application to combine this opening with my master curriculum, tailor and independently review the application, then track it."
+  short_description: "Prepare one application with live progress"
+  default_prompt: "Use $prepare-job-application to prepare this opening with multiple agents, editable LaTeX documents, independent review, live status, and Notion tracking."
 dependencies:
   tools:
     - type: "mcp"

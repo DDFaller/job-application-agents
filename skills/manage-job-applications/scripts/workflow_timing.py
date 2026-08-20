@@ -14,6 +14,7 @@ from typing import Any
 
 
 SCHEMA_VERSION = 1
+STATUS_HEARTBEAT_SECONDS = 45
 
 
 def now() -> datetime:
@@ -180,6 +181,30 @@ def summary(record: dict[str, Any]) -> dict[str, Any]:
             "events": record["events"]}
 
 
+def status_snapshot(record: dict[str, Any]) -> dict[str, Any]:
+    current = now()
+    ended = parse_time(record["ended_at"]) if record.get("ended_at") else current
+    elapsed_ms = max(0, round((ended - parse_time(record["started_at"])).total_seconds() * 1000))
+    events = record.get("events", [])
+    active = [
+        {
+            "event_id": event["event_id"], "skill": event["skill"], "stage": event["stage"],
+            "attempt": event["attempt"], "parallel_group": event.get("parallel_group"),
+        }
+        for event in events if event.get("ended_at") is None and event.get("kind") == "active"
+    ]
+    completed = [event["stage"] for event in events if event.get("ended_at") and event.get("status") == "completed"]
+    latest = max(events, key=lambda event: event.get("ended_at") or event["started_at"], default=None)
+    latest_time = parse_time(latest.get("ended_at") or latest["started_at"]) if latest else parse_time(record["started_at"])
+    seconds_since_transition = max(0, round((current - latest_time).total_seconds()))
+    return {
+        "run_id": record["run_id"], "status": record.get("status"), "elapsed_ms": elapsed_ms,
+        "active_agents": len(active), "active_stages": active, "completed_stages": completed,
+        "latest_transition": latest, "seconds_since_transition": seconds_since_transition,
+        "heartbeat_due": record.get("ended_at") is None and seconds_since_transition >= STATUS_HEARTBEAT_SECONDS,
+    }
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     sub = root.add_subparsers(dest="command", required=True)
@@ -207,6 +232,8 @@ def parser() -> argparse.ArgumentParser:
     end_parser.add_argument("--version-directory")
     report_parser = sub.add_parser("report")
     report_parser.add_argument("--file", type=Path, required=True)
+    status_parser = sub.add_parser("status")
+    status_parser.add_argument("--file", type=Path, required=True)
     validate_parser = sub.add_parser("validate")
     validate_parser.add_argument("--file", type=Path, required=True)
     return root
@@ -225,6 +252,8 @@ def main() -> int:
         finalize(args.file, args.status, args.application_root, args.version_directory)
     elif args.command == "report":
         print(json.dumps(summary(load(args.file)), indent=2, ensure_ascii=False))
+    elif args.command == "status":
+        print(json.dumps(status_snapshot(load(args.file)), indent=2, ensure_ascii=False))
     else:
         errors = integrity_errors(load(args.file))
         for error in errors:

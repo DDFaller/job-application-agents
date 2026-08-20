@@ -29,6 +29,14 @@ wait time, and a chronological event table. Mention `parallel_group` values
 when stages overlap; do not add concurrent durations together when calculating
 active elapsed time. Only the coordinator may finalize the ledger.
 
+## Live user status
+
+- Publish an initial status before delegation and a concise update for every stage transition, retry, blocker, and recovery.
+- While any worker is active, collect messages or poll ledgers at intervals no longer than 45 seconds. If no transition occurred, publish a heartbeat with application label, completed stages, active stages/agent count, next stage, blockers, and elapsed time.
+- Render status as `[Company — Role] status: <current> | completed: <stages> | active agents: <n> | next: <stage> | elapsed: <time>`. Omit only fields that are genuinely unknown.
+- Require nested `$prepare-job-application` workers to send transitions to this coordinator. Do not expose raw worker chatter or let workers independently address the user.
+- Use `workflow_timing.py status --file <ledger>` for factual snapshots and finish each item as `prepared`, `needs input`, or `failed`.
+
 ## Delegate first and in parallel
 
 - Keep the parent session dedicated to routing, concurrency control, result collection, retries, and the final summary.
@@ -36,6 +44,7 @@ active elapsed time. Only the coordinator may finalize the ledger.
 - Launch independent applications or independent operations concurrently by default. Submit the parallel worker batch before waiting for any individual result.
 - Use `fork_turns: none` and pass each worker only its task-specific opening, required local roots, selected worker skill, and output contract.
 - Serialize only work with a real dependency, an approval gate, or insufficient concurrency capacity. When capacity is constrained, run the largest safe parallel batch and continue with the next batch as slots become available; never absorb worker work into the parent session as a fallback.
+- For a single application, reserve enough capacity for at least the job-extraction agent, candidate-evidence agent on a cache miss, Terra writer, and independent Luna reviewer. If the configured six-worker capacity is unavailable, announce degraded serial mode rather than silently suppressing delegation.
 
 ## Route the request
 
@@ -74,7 +83,7 @@ Delegate every live board review to `$requeue-unanswered-applications`. Its norm
 2. Resolve every card's `Local Bundle Path` and audit its manifest, review receipt, and deterministic page/text quality results before delegating changes.
 3. Leave compliant cards unchanged. For each noncompliant card, reuse its validated job and candidate-evidence inputs and delegate a fresh bundle revision. Preserve evidence partitioning, independent review, staged rendering, and review-gated promotion.
 4. Apply one-page remediation according to `$tailor-application-bundle`: reduce résumés that fail the one-page deterministic gate. Never pad.
-5. Create a new immutable version, then delegate a deduplicated Notion update that replaces only `Current Documents` and version metadata while preserving status and unrelated page content.
+5. Create a new version, then delegate a deduplicated Notion update that replaces only `Current Documents` and version metadata while preserving status and unrelated page content. Only the version referenced by `current.json` may later receive direct user LaTeX edits.
 6. Verify the live queue again and report changed, unchanged, and blocked cards separately.
 
 ## Delegation contract

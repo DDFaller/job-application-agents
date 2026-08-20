@@ -125,8 +125,19 @@ class RenderBundleTests(unittest.TestCase):
 
     def test_preflight_checks_all_rendering_tools(self) -> None:
         with mock.patch.object(render_bundle, "rendercv_binary", return_value=Path("rendercv")) as rendercv, mock.patch.object(render_bundle.shutil, "which", side_effect=lambda name: name):
-            render_bundle.preflight_rendering(Path("skill"))
+            render_bundle.preflight_rendering(Path("skill"), "rendercv")
         rendercv.assert_called_once_with(Path("skill"))
+
+    def test_latex_is_default_and_uses_profile_paper(self) -> None:
+        with mock.patch.object(render_bundle.shutil, "which", side_effect=lambda name: name):
+            render_bundle.preflight_rendering(Path("skill"))
+        skill = Path(__file__).resolve().parent.parent
+        self.assertIn("letterpaper", render_bundle.latex_preamble_for_profile(skill, "international"))
+        self.assertIn("a4paper", render_bundle.latex_preamble_for_profile(skill, "france"))
+        self.assertEqual(
+            render_bundle.latex_escape("A&B_~^\\"),
+            r"A\&B\_\textasciitilde{}\textasciicircum{}\textbackslash{}",
+        )
 
     def test_france_profile_uses_a4_and_photo(self) -> None:
         bundle = {
@@ -182,6 +193,7 @@ class RenderBundleTests(unittest.TestCase):
                 "inputs": bundle["inputs"],
                 "rendering": {"profile": "international"},
                 "quality": {"resume": {"pages": 1}, "motivation_letter": {"pages": 1}},
+                "document_text_sha256": {"resume.pdf": "a", "motivation-letter.pdf": "b"},
                 "artifacts": artifacts,
             })
             template = json.loads((Path(__file__).resolve().parent.parent / "references" / "tailoring-review-template.json").read_text(encoding="utf-8"))
@@ -201,11 +213,56 @@ class RenderBundleTests(unittest.TestCase):
                 stage, review_path, application_root, Path(__file__).resolve().parent.parent
             )
             manifest = json.loads((promoted / "manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["schema_version"], 2)
+            self.assertEqual(manifest["schema_version"], 3)
+            self.assertEqual(manifest["document_revision"], 0)
             self.assertEqual(manifest["semantic_review"]["verdict"], "accept")
             self.assertNotIn("visual_inspection", manifest["quality_gate"])
             self.assertTrue((promoted / "tailoring-review.json").is_file())
             self.assertEqual(json.loads((application_root / "current.json").read_text())["version"], "v001")
+
+    def test_rebuild_current_latex_archives_revision_and_stales_text_review(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            application = Path(temporary) / "application"
+            version = application / "v001"
+            version.mkdir(parents=True)
+            for name in ("resume.tex", "letter.tex", "preamble.tex"):
+                (version / name).write_text(name + " edited", encoding="utf-8")
+            for name in ("resume.pdf", "motivation-letter.pdf"):
+                (version / name).write_bytes(b"old")
+            render_bundle.atomic_json(version / "manifest.json", {
+                "schema_version": 3,
+                "version": "v001",
+                "rendering": {"resume_engine": "latex", "profile": "international", "max_pages": 1},
+                "quality_gate": {},
+                "semantic_review": {"status": "fresh", "verdict": "accept"},
+                "document_revision": 0,
+                "document_text_sha256": {"resume.pdf": "old", "motivation-letter.pdf": "old"},
+                "manual_revisions": [],
+            })
+            render_bundle.atomic_json(application / "current.json", {
+                "version": "v001", "path": str(version.resolve()),
+                "manifest": str((version / "manifest.json").resolve()),
+            })
+
+            def resume(_tex, out, _pages):
+                (out / "resume.pdf").write_bytes(b"new resume")
+                return {"pages": 1, "text_chars": 10}
+
+            def letter(_tex, out):
+                (out / "motivation-letter.pdf").write_bytes(b"new letter")
+                return {"pages": 1, "text_chars": 10}
+
+            with mock.patch.object(render_bundle, "render_resume_latex", side_effect=resume), \
+                 mock.patch.object(render_bundle, "to_letter_pdf_latex", side_effect=letter), \
+                 mock.patch.object(render_bundle, "document_text_hashes", return_value={"resume.pdf": "new", "motivation-letter.pdf": "new"}):
+                render_bundle.rebuild_current_version(version, Path("skill"))
+
+            manifest = json.loads((version / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["document_revision"], 1)
+            self.assertEqual(manifest["source_provenance"], "user_modified")
+            self.assertEqual(manifest["semantic_review"]["status"], "stale")
+            self.assertTrue((version / "manual-revisions" / "r001" / "resume.tex").is_file())
+            self.assertEqual((version / "resume.pdf").read_bytes(), b"new resume")
 
 
 if __name__ == "__main__":

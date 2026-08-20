@@ -2,7 +2,23 @@
   "mcpServers": {
     "notion": {
       "type": "http",
-      "url": "https://mcp.notion.com/mcp"
+      "url": "https://mcp.notion.com/mcp",
+      "required": true,
+      "startup_timeout_sec": 30,
+      "tool_timeout_sec": 120,
+      "default_tools_approval_mode": "approve",
+      "enabled_tools": [
+        "notion_fetch",
+        "notion_search",
+        "notion_query_data_sources",
+        "notion_create_file_upload",
+        "notion_create_database",
+        "notion_create_pages",
+        "notion_create_view",
+        "notion_update_data_source",
+        "notion_update_page",
+        "notion_update_view"
+      ]
     }
   }
 }

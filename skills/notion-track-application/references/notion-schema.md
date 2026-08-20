@@ -34,7 +34,7 @@ inferred from `Generated At` or used as a requeue fallback.
 
 ## Page content
 
-Keep sections named `Job Summary`, `Requirements`, `Match Analysis`, `Gaps`, and `Current Documents`. Read the Notion enhanced-Markdown resource before constructing content.
+Keep sections named `Job Summary`, `Requirements`, `Match Analysis`, `Gaps`, and `Current Documents`. `Current Documents` contains the current résumé and letter PDFs plus `resume.tex`, `letter.tex`, and `preamble.tex`. Replace that section only after the schema-3 manifest hashes validate and semantic-review status is fresh. Read the Notion enhanced-Markdown resource before constructing content.
 
 ## Status rules
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render an immutable application bundle with a regional RenderCV profile."""
+"""Render, promote, and safely rebuild reviewed LaTeX application bundles."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 RENDERCV_VERSION = "2.8"
-LATEX_ENGINES = ("rendercv", "latex")
+LATEX_ENGINES = ("latex", "rendercv")
 SUBPROCESS_TIMEOUT_SECONDS = 60
 PROFILES = ("auto", "international", "france")
 FRANCE_LOCATION_TOKENS = {
@@ -329,6 +329,7 @@ def to_letter_pdf(document: str, out_dir: Path) -> None:
 LATEX_SPECIAL_CHARS = str.maketrans({
     "&": r"\&", "%": r"\%", "$": r"\$", "#": r"\#",
     "_": r"\_", "{": r"\{", "}": r"\}",
+    "\\": r"\textbackslash{}", "~": r"\textasciitilde{}", "^": r"\textasciicircum{}",
 })
 
 
@@ -341,6 +342,17 @@ def _latex_preamble(skill_dir: Path) -> str:
     if not path.is_file():
         raise RuntimeError(f"LaTeX preamble not found: {path}")
     return path.read_text(encoding="utf-8")
+
+
+def latex_preamble_for_profile(skill_dir: Path, profile: str) -> str:
+    preamble = _latex_preamble(skill_dir)
+    paper = "a4paper" if profile == "france" else "letterpaper"
+    return preamble.replace("{{PAPER_SIZE}}", paper)
+
+
+def latex_preamble_reference() -> str:
+    """Keep generated documents readable and independently maintainable."""
+    return "\\input{preamble.tex}"
 
 
 def latex_cv_document(
@@ -426,7 +438,7 @@ def latex_cv_document(
         photo_header = photo_env + "\\begin{minipage}[t]{0.74\\textwidth}\\vspace{0pt}"
     footer_close = "\\end{minipage}" if photo_env else ""
     contact_display = f"\\\\{contact_line}" if contact_line else ""
-    document = f"""{_latex_preamble(skill_dir)}
+    document = f"""{latex_preamble_reference()}
 
 \\begin{{document}}
 
@@ -464,7 +476,7 @@ def latex_letter_document(
     for p in letter["paragraphs"]:
         paragraphs.append(f"\\noindent {latex_escape(text_of(p))} \\par")
     body = "\n\n".join(paragraphs)
-    return f"""{_latex_preamble(skill_dir)}
+    return f"""{latex_preamble_reference()}
 
 \\begin{{document}}
 
@@ -504,7 +516,8 @@ def render_resume_latex(tex_path: Path, out_dir: Path, max_pages: int) -> dict[s
         raise RuntimeError("xelatex is required for LaTeX resume rendering")
     for _pass in range(2):
         result = subprocess.run(
-            [xelatex, "-interaction=nonstopmode", "-output-directory", str(out_dir), str(tex_path)],
+            [xelatex, "-no-shell-escape", "-halt-on-error", "-file-line-error",
+             "-interaction=nonstopmode", "-output-directory", str(out_dir), str(tex_path)],
             cwd=out_dir, text=True, capture_output=True, timeout=SUBPROCESS_TIMEOUT_SECONDS,
         )
         if result.returncode:
@@ -518,7 +531,8 @@ def to_letter_pdf_latex(tex_path: Path, out_dir: Path) -> dict[str, int]:
         raise RuntimeError("xelatex is required for LaTeX letter rendering")
     for _pass in range(2):
         result = subprocess.run(
-            [xelatex, "-interaction=nonstopmode", "-output-directory", str(out_dir), str(tex_path)],
+            [xelatex, "-no-shell-escape", "-halt-on-error", "-file-line-error",
+             "-interaction=nonstopmode", "-output-directory", str(out_dir), str(tex_path)],
             cwd=out_dir, text=True, capture_output=True, timeout=SUBPROCESS_TIMEOUT_SECONDS,
         )
         if result.returncode:
@@ -582,7 +596,27 @@ def inspect_pdf(path: Path, label: str, max_pages: int) -> dict[str, int]:
     return {"pages": pages, "text_chars": text_chars}
 
 
-def preflight_rendering(skill_dir: Path, engine: str = "rendercv") -> None:
+def normalized_pdf_text(path: Path) -> str:
+    pdftotext = shutil.which("pdftotext")
+    if not pdftotext:
+        raise RuntimeError("pdftotext is required for PDF text fingerprinting")
+    result = subprocess.run(
+        [pdftotext, str(path), "-"], text=True, capture_output=True,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
+    )
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip() or f"could not extract text from {path.name}")
+    return " ".join(result.stdout.split())
+
+
+def document_text_hashes(directory: Path) -> dict[str, str]:
+    return {
+        name: hashlib.sha256(normalized_pdf_text(directory / name).encode("utf-8")).hexdigest()
+        for name in ("resume.pdf", "motivation-letter.pdf")
+    }
+
+
+def preflight_rendering(skill_dir: Path, engine: str = "latex") -> None:
     missing: list[str] = []
     if engine == "latex":
         if not shutil.which("xelatex"):
@@ -601,6 +635,15 @@ def sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def artifact_inventory(directory: Path) -> dict[str, dict[str, Any]]:
+    excluded = {"manifest.json", "staging-manifest.json"}
+    return {
+        str(path.relative_to(directory)): {"sha256": sha256(path), "bytes": path.stat().st_size}
+        for path in sorted(directory.rglob("*"))
+        if path.is_file() and path.name not in excluded
+    }
 
 
 def load_json_object(path: Path) -> dict[str, Any]:
@@ -672,7 +715,7 @@ def stage_bundle(args: argparse.Namespace, skill_dir: Path) -> Path:
     )
     job = json.loads(job_bytes.decode("utf-8"))
     profile = resolve_profile(bundle, args.profile, job)
-    engine = getattr(args, "render_engine", "rendercv")
+    engine = getattr(args, "render_engine", "latex")
     if args.photo and profile != "france":
         raise ValueError("--photo is accepted only with the France profile")
     photo = validate_photo(args.photo) if args.photo else (discover_approved_photo() if profile == "france" else None)
@@ -694,6 +737,9 @@ def stage_bundle(args: argparse.Namespace, skill_dir: Path) -> Path:
         (stage_dir / "motivation-letter.md").write_text(letter_markdown(bundle), encoding="utf-8")
         (stage_dir / "match-analysis.md").write_text(match_markdown(bundle), encoding="utf-8")
         if engine == "latex":
+            (stage_dir / "preamble.tex").write_text(
+                latex_preamble_for_profile(skill_dir, profile), encoding="utf-8"
+            )
             (stage_dir / "resume.tex").write_text(
                 latex_cv_document(bundle, profile, photo_name, job, skill_dir),
                 encoding="utf-8",
@@ -709,6 +755,10 @@ def stage_bundle(args: argparse.Namespace, skill_dir: Path) -> Path:
                 "page_size": design["page"]["size"], "max_pages": max_pages,
                 "photo": photo_name, "letter_engine": "latex",
             }
+            generated_dir = stage_dir / "generated"
+            generated_dir.mkdir()
+            for name in ("resume.tex", "letter.tex", "preamble.tex", "resume.pdf", "motivation-letter.pdf"):
+                shutil.copy2(stage_dir / name, generated_dir / name)
         else:
             (stage_dir / "resume.yaml").write_text(
                 "# Generated deterministically from bundle.json\n"
@@ -724,18 +774,16 @@ def stage_bundle(args: argparse.Namespace, skill_dir: Path) -> Path:
                 "page_size": design["page"]["size"], "max_pages": max_pages,
                 "photo": photo_name, "letter_engine": "groff",
             }
-        artifacts = {
-            path.name: {"sha256": sha256(path), "bytes": path.stat().st_size}
-            for path in sorted(stage_dir.iterdir()) if path.is_file()
-        }
+        artifacts = artifact_inventory(stage_dir)
         staging_manifest = {
-            "schema_version": 1,
+            "schema_version": 2,
             "application_root": str(application_root),
             "bundle_sha256": hashlib.sha256(bundle_bytes).hexdigest(),
             "job": bundle["job"],
             "inputs": bundle["inputs"],
             "rendering": rendering,
             "quality": {"resume": resume_quality, "motivation_letter": letter_quality},
+            "document_text_sha256": document_text_hashes(stage_dir),
             "artifacts": artifacts,
         }
         atomic_json(stage_dir / "staging-manifest.json", staging_manifest)
@@ -761,11 +809,7 @@ def promote_bundle(stage_dir: Path, review_path: Path, application_root: Path, s
     review = accepted_review(review_path.expanduser().resolve(), stage_dir / "bundle.json", skill_dir)
     review_target = stage_dir / "tailoring-review.json"
     review_target.write_bytes(review_path.expanduser().resolve().read_bytes())
-    artifacts = {
-        path.name: {"sha256": sha256(path), "bytes": path.stat().st_size}
-        for path in sorted(stage_dir.iterdir())
-        if path.is_file() and path.name not in {"staging-manifest.json", "manifest.json"}
-    }
+    artifacts = artifact_inventory(stage_dir)
     application_root.mkdir(parents=True, exist_ok=True)
     lock_path = application_root / ".version.lock"
     with lock_path.open("a+", encoding="utf-8") as lock:
@@ -780,19 +824,25 @@ def promote_bundle(stage_dir: Path, review_path: Path, application_root: Path, s
         if out_dir.exists():
             raise RuntimeError(f"incomplete version directory already exists: {out_dir}")
         manifest = {
-            "schema_version": 2,
+            "schema_version": 3,
             "version": out_dir.name,
+            "application_root": str(application_root),
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "job": staging["job"],
             "inputs": staging["inputs"],
             "input_snapshots": {"job_json": "job.json", "candidate_evidence_json": "candidate-evidence.json"},
             "semantic_review": {
                 "verdict": "accept",
+                "status": "fresh",
                 "snapshot": "tailoring-review.json",
                 "sha256": artifacts["tailoring-review.json"]["sha256"],
                 "bundle_sha256": review["inputs"]["bundle_sha256"],
             },
             "rendering": staging["rendering"],
+            "document_revision": 0,
+            "source_provenance": "agent_generated",
+            "manual_revisions": [],
+            "document_text_sha256": staging["document_text_sha256"],
             "quality_gate": {
                 "automated": "passed", "semantic_review": "accepted",
                 "resume": staging["quality"]["resume"],
@@ -812,6 +862,123 @@ def promote_bundle(stage_dir: Path, review_path: Path, application_root: Path, s
         return out_dir
 
 
+def rebuild_current_version(version_dir: Path, skill_dir: Path) -> Path:
+    version_dir = version_dir.expanduser().resolve()
+    manifest_path = version_dir / "manifest.json"
+    manifest = load_json_object(manifest_path)
+    if manifest.get("schema_version") != 3:
+        raise ValueError("manual rebuilding requires a schema-3 LaTeX version")
+    if manifest.get("rendering", {}).get("resume_engine") != "latex":
+        raise ValueError("manual rebuilding is available only for LaTeX versions")
+    application_root = Path(manifest.get("application_root") or version_dir.parent).expanduser().resolve()
+    current_path = application_root / "current.json"
+    current = load_json_object(current_path)
+    if Path(current.get("path", "")).expanduser().resolve() != version_dir:
+        raise ValueError("only the version referenced by current.json may be rebuilt")
+    required = ("resume.tex", "letter.tex", "preamble.tex")
+    missing = [name for name in required if not (version_dir / name).is_file()]
+    if missing:
+        raise ValueError("missing editable LaTeX source: " + ", ".join(missing))
+    editable_outputs = set(required) | {"resume.pdf", "motivation-letter.pdf"}
+    for name, metadata in manifest.get("artifacts", {}).items():
+        if name in editable_outputs:
+            continue
+        path = version_dir / name
+        if not path.is_file() or sha256(path) != metadata.get("sha256") or path.stat().st_size != metadata.get("bytes"):
+            raise ValueError(f"non-editable version artifact changed or is missing: {name}")
+
+    profile = manifest.get("rendering", {}).get("profile", "international")
+    max_pages = int(manifest.get("rendering", {}).get("max_pages", 1))
+    revision = int(manifest.get("document_revision", 0)) + 1
+    rebuild_dir = Path(tempfile.mkdtemp(prefix=".latex-rebuild-", dir=version_dir.parent))
+    try:
+        for name in required:
+            shutil.copy2(version_dir / name, rebuild_dir / name)
+        photo_name = manifest.get("rendering", {}).get("photo")
+        if photo_name:
+            photo_path = version_dir / photo_name
+            if not photo_path.is_file():
+                raise ValueError(f"manifest photo is missing: {photo_name}")
+            shutil.copy2(photo_path, rebuild_dir / photo_name)
+        resume_quality = render_resume_latex(rebuild_dir / "resume.tex", rebuild_dir, max_pages)
+        letter_quality = to_letter_pdf_latex(rebuild_dir / "letter.tex", rebuild_dir)
+        new_text_hashes = document_text_hashes(rebuild_dir)
+        previous_text_hashes = manifest.get("document_text_sha256", {})
+        textual_change = new_text_hashes != previous_text_hashes
+
+        revision_root = version_dir / "manual-revisions"
+        revision_dir = revision_root / f"r{revision:03d}"
+        if revision_dir.exists():
+            raise ValueError(f"manual revision already exists: {revision_dir}")
+        revision_dir.mkdir(parents=True)
+        for name in required + ("resume.pdf", "motivation-letter.pdf"):
+            source = rebuild_dir / name
+            shutil.copy2(source, revision_dir / name)
+        for name in ("resume.pdf", "motivation-letter.pdf"):
+            os.replace(rebuild_dir / name, version_dir / name)
+
+        rebuilt_at = datetime.now(timezone.utc).isoformat()
+        revisions = list(manifest.get("manual_revisions", []))
+        revisions.append({
+            "revision": revision,
+            "path": str(revision_dir.relative_to(version_dir)),
+            "rebuilt_at": rebuilt_at,
+            "textual_change": textual_change,
+            "document_text_sha256": new_text_hashes,
+        })
+        manifest["document_revision"] = revision
+        manifest["source_provenance"] = "user_modified"
+        manifest["manual_revisions"] = revisions
+        manifest["document_text_sha256"] = new_text_hashes
+        manifest["quality_gate"]["resume"] = resume_quality
+        manifest["quality_gate"]["motivation_letter"] = letter_quality
+        manifest["quality_gate"]["manual_rebuild"] = "passed"
+        manifest["semantic_review"]["status"] = "stale" if textual_change else "fresh"
+        manifest["semantic_review"]["stale_reason"] = (
+            "Rendered document text changed after the accepted bundle review."
+            if textual_change else None
+        )
+        manifest["artifacts"] = artifact_inventory(version_dir)
+        atomic_json(manifest_path, manifest)
+        return version_dir
+    finally:
+        shutil.rmtree(rebuild_dir, ignore_errors=True)
+
+
+def accept_manual_edit_review(version_dir: Path, review_path: Path, skill_dir: Path) -> Path:
+    version_dir = version_dir.expanduser().resolve()
+    review_path = review_path.expanduser().resolve()
+    manifest_path = version_dir / "manifest.json"
+    manifest = load_json_object(manifest_path)
+    application_root = Path(manifest.get("application_root") or version_dir.parent).resolve()
+    current = load_json_object(application_root / "current.json")
+    if Path(current.get("path", "")).expanduser().resolve() != version_dir:
+        raise ValueError("only the current version may receive a manual-edit review")
+    validator_path = skill_dir / "scripts" / "validate_manual_edit_review.py"
+    spec = importlib.util.spec_from_file_location("manual_edit_validator", validator_path)
+    if not spec or not spec.loader:
+        raise RuntimeError("could not load manual edit review validator")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    review = load_json_object(review_path)
+    errors = module.validate(review, version_dir)
+    if errors:
+        raise ValueError("manual edit review is invalid: " + "; ".join(errors))
+    if review.get("verdict") != "accept":
+        raise ValueError("manual edit review verdict must be accept")
+    target_name = f"manual-edit-review-r{manifest['document_revision']:03d}.json"
+    target = version_dir / target_name
+    target.write_bytes(review_path.read_bytes())
+    manifest["semantic_review"].update({
+        "status": "fresh", "verdict": "accept", "stale_reason": None,
+        "manual_review": target_name, "manual_review_sha256": sha256(target),
+        "reviewed_document_text_sha256": manifest["document_text_sha256"],
+    })
+    manifest["artifacts"] = artifact_inventory(version_dir)
+    atomic_json(manifest_path, manifest)
+    return version_dir
+
+
 def main() -> int:
     skill_dir = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser()
@@ -820,9 +987,12 @@ def main() -> int:
     parser.add_argument("--style", type=Path, default=skill_dir / "assets" / "application.ms")
     parser.add_argument("--profile", choices=PROFILES, default="auto")
     parser.add_argument("--photo", type=Path, help="Explicitly approved local JPEG/PNG; France profile only")
-    parser.add_argument("--render-engine", choices=LATEX_ENGINES, default="rendercv", help="CV rendering engine (default: rendercv)")
+    parser.add_argument("--render-engine", choices=LATEX_ENGINES, default="latex", help="rendering engine (default: latex)")
     parser.add_argument("--stage", action="store_true", help="render into non-published staging")
     parser.add_argument("--promote", type=Path, metavar="STAGING_DIR", help="promote reviewed staging atomically")
+    parser.add_argument("--rebuild-version", type=Path, metavar="VERSION_DIR", help="rebuild user-edited LaTeX in the current version")
+    parser.add_argument("--accept-manual-review", type=Path, metavar="REVIEW_JSON", help="record an accepted evidence review for rebuilt documents")
+    parser.add_argument("--manual-review-version", type=Path, metavar="VERSION_DIR", help="current version covered by --accept-manual-review")
     parser.add_argument("--review-json", type=Path, help="accepted semantic review required for promotion")
     parser.add_argument("--preflight", action="store_true", help="check rendering tools without rendering a bundle")
     args = parser.parse_args()
@@ -833,6 +1003,26 @@ def main() -> int:
             return 0
         except Exception as exc:
             print(f"render preflight failed: {exc}", file=sys.stderr)
+            return 1
+    if args.rebuild_version:
+        if args.stage or args.promote:
+            parser.error("--rebuild-version cannot be combined with --stage or --promote")
+        try:
+            print(rebuild_current_version(args.rebuild_version, skill_dir))
+            return 0
+        except Exception as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+    if args.accept_manual_review:
+        if not args.manual_review_version:
+            parser.error("--manual-review-version is required with --accept-manual-review")
+        if args.stage or args.promote:
+            parser.error("--accept-manual-review cannot be combined with --stage or --promote")
+        try:
+            print(accept_manual_edit_review(args.manual_review_version, args.accept_manual_review, skill_dir))
+            return 0
+        except Exception as exc:
+            print(str(exc), file=sys.stderr)
             return 1
     if args.stage == bool(args.promote):
         parser.error("choose exactly one of --stage or --promote unless --preflight is used")

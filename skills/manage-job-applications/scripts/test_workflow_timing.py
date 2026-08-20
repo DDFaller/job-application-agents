@@ -98,6 +98,31 @@ class TimingTests(unittest.TestCase):
             self.assertEqual(record["events"][0]["status"], "cancelled")
             self.assertTrue(timing.integrity_errors(record) == [])
 
+    def test_status_snapshot_reports_parallel_running_work(self):
+        record = {
+            "run_id": "live", "status": "running", "started_at": "2026-01-01T00:00:00+00:00",
+            "ended_at": None,
+            "events": [
+                {"event_id": "done", "skill": "extract", "stage": "setup", "attempt": 1,
+                 "kind": "active", "parallel_group": None, "status": "completed",
+                 "started_at": "2026-01-01T00:00:01+00:00", "ended_at": "2026-01-01T00:00:02+00:00"},
+                {"event_id": "job", "skill": "extract", "stage": "job extraction", "attempt": 1,
+                 "kind": "active", "parallel_group": "inputs", "status": "running",
+                 "started_at": "2026-01-01T00:00:03+00:00", "ended_at": None},
+                {"event_id": "candidate", "skill": "evidence", "stage": "candidate mapping", "attempt": 1,
+                 "kind": "active", "parallel_group": "inputs", "status": "running",
+                 "started_at": "2026-01-01T00:00:03+00:00", "ended_at": None},
+            ],
+        }
+        with mock.patch.object(timing, "now", return_value=timing.datetime(2026, 1, 1, 0, 0, 5, tzinfo=timing.timezone.utc)):
+            result = timing.status_snapshot(record)
+        self.assertEqual(result["active_agents"], 2)
+        self.assertEqual(result["completed_stages"], ["setup"])
+        self.assertEqual({item["parallel_group"] for item in result["active_stages"]}, {"inputs"})
+        self.assertFalse(result["heartbeat_due"])
+        with mock.patch.object(timing, "now", return_value=timing.datetime(2026, 1, 1, 0, 0, 50, tzinfo=timing.timezone.utc)):
+            self.assertTrue(timing.status_snapshot(record)["heartbeat_due"])
+
 
 if __name__ == "__main__":
     unittest.main()
