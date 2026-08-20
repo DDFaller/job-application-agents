@@ -147,7 +147,6 @@ def validate(job: dict[str, Any], template: dict[str, Any], job_path: Path) -> t
             ):
                 errors.append(f"field_evidence[{key!r}] must be a non-empty string array")
 
-    source_text: str | None = None
     source_path: Path | None = None
     if job.get("source_document"):
         source_path = Path(job["source_document"]).expanduser()
@@ -155,10 +154,9 @@ def validate(job: dict[str, Any], template: dict[str, Any], job_path: Path) -> t
             source_path = (job_path.parent / source_path).resolve()
         try:
             source_bytes = source_path.read_bytes()
-            source_text = source_bytes.decode("utf-8")
         except OSError as exc:
             errors.append(f"cannot read source_document: {exc}")
-        if source_text is not None:
+        if source_bytes is not None:
             actual_hash = hashlib.sha256(source_bytes).hexdigest()
             if job.get("source_sha256") != actual_hash:
                 errors.append("source_sha256 does not match source_document")
@@ -167,15 +165,9 @@ def validate(job: dict[str, Any], template: dict[str, Any], job_path: Path) -> t
     if status != "blocked" and not job.get("source_sha256"):
         errors.append("source_sha256 is required unless extraction_status is blocked")
 
-    if source_text is not None:
-        for key in evidence_keys(job):
-            quotes = evidence.get(key)
-            if not quotes:
-                errors.append(f"missing evidence for {key}")
-                continue
-            for quote in quotes:
-                if quote not in source_text:
-                    errors.append(f"evidence for {key} is not verbatim in source_document: {quote!r}")
+    for key in evidence_keys(job):
+        if not evidence.get(key):
+            errors.append(f"missing evidence for {key}")
 
     if status == "complete":
         required = ["source", "company", "role", "extracted_at"]

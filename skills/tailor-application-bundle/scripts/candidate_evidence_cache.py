@@ -144,15 +144,12 @@ def begin(root: Path, key: str) -> dict[str, str]:
     if staging.exists():
         shutil.rmtree(staging)
     staging.mkdir()
-    snapshots = staging / "snapshots"
-    snapshots.mkdir()
     return {
         "fingerprint": key,
         "token": token,
         "staging_dir": str(staging),
         "evidence": str(staging / "candidate-evidence.json"),
         "receipt": str(staging / "candidate-evidence.receipt.json"),
-        "snapshots": str(snapshots),
     }
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate Luna-produced candidate facts against local source snapshots."""
+"""Validate Luna-produced candidate facts against local source files."""
 
 from __future__ import annotations
 
@@ -45,16 +45,11 @@ def receipt_for(record: dict[str, Any], evidence_path: Path) -> dict[str, Any]:
     sources = []
     for source in record.get("sources", []):
         original = Path(source["path"]).expanduser().resolve()
-        snapshot = Path(source["snapshot_path"]).expanduser().resolve()
         sources.append({
             "path": str(original),
             "sha256": source["sha256"],
             "size": original.stat().st_size,
             "mtime_ns": original.stat().st_mtime_ns,
-            "snapshot_path": str(snapshot),
-            "snapshot_sha256": source["snapshot_sha256"],
-            "snapshot_size": snapshot.stat().st_size,
-            "snapshot_mtime_ns": snapshot.stat().st_mtime_ns,
         })
     _, artifact_sha256 = file_bytes(evidence_path)
     return {
@@ -83,7 +78,7 @@ def verify_receipt(receipt_path: Path, evidence_path: Path) -> list[str]:
             errors.append("candidate evidence receipt artifact hash does not match")
         record = json.loads(artifact_bytes.decode("utf-8"))
         expected = {
-            (str(Path(item["path"]).expanduser().resolve()), str(Path(item["snapshot_path"]).expanduser().resolve())): item
+            str(Path(item["path"]).expanduser().resolve()): item
             for item in record.get("sources", [])
         }
         receipt_sources = receipt.get("sources")
@@ -92,24 +87,21 @@ def verify_receipt(receipt_path: Path, evidence_path: Path) -> list[str]:
             receipt_sources = []
         seen = set()
         for item in receipt_sources:
-            key = (item.get("path"), item.get("snapshot_path"))
+            key = item.get("path")
             if key in seen or key not in expected:
                 errors.append("candidate evidence receipt contains an unexpected source")
                 continue
             seen.add(key)
             source = expected[key]
-            if item.get("sha256") != source.get("sha256") or item.get("snapshot_sha256") != source.get("snapshot_sha256"):
-                errors.append(f"candidate evidence receipt hashes do not match: {key[0]}")
-            for key in ("path", "snapshot_path"):
-                path = Path(item[key])
-                if not path.is_file():
-                    errors.append(f"receipt file is missing: {path}")
-                    continue
-                stat = path.stat()
-                size_key = "size" if key == "path" else "snapshot_size"
-                mtime_key = "mtime_ns" if key == "path" else "snapshot_mtime_ns"
-                if stat.st_size != item.get(size_key) or stat.st_mtime_ns != item.get(mtime_key):
-                    errors.append(f"receipt file changed: {path}")
+            if item.get("sha256") != source.get("sha256"):
+                errors.append(f"candidate evidence receipt hashes do not match: {key}")
+            path = Path(item["path"])
+            if not path.is_file():
+                errors.append(f"receipt file is missing: {path}")
+                continue
+            stat = path.stat()
+            if stat.st_size != item.get("size") or stat.st_mtime_ns != item.get("mtime_ns"):
+                errors.append(f"receipt file changed: {path}")
     except (KeyError, OSError, TypeError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
         errors.append(f"cannot verify candidate evidence receipt: {exc}")
     return errors
@@ -164,28 +156,20 @@ def validate(record: dict[str, Any], template: dict[str, Any]) -> tuple[list[str
     if not isinstance(sources, list):
         errors.append("sources must be an array")
         sources = []
-    snapshots: dict[str, str] = {}
     source_paths: set[str] = set()
     for index, source in enumerate(sources):
         if not isinstance(source, dict):
             errors.append(f"sources.{index} must be an object")
             continue
-        required = {"path", "sha256", "snapshot_path", "snapshot_sha256", "pages"}
+        required = {"path", "sha256", "pages"}
         if set(source) != required:
             errors.append(f"sources.{index} must contain exactly {sorted(required)}")
             continue
         try:
             original = Path(source["path"]).expanduser().resolve()
-            snapshot = Path(source["snapshot_path"]).expanduser().resolve()
             if not original.is_file() or file_hash(original) != source["sha256"]:
                 errors.append(f"sources.{index} original file hash mismatch")
-            snapshot_bytes = snapshot.read_bytes()
-            text = snapshot_bytes.decode("utf-8")
-            digest = hashlib.sha256(snapshot_bytes).hexdigest()
-            if digest != source["snapshot_sha256"]:
-                errors.append(f"sources.{index} snapshot hash mismatch")
             source_paths.add(str(original))
-            snapshots[str(original)] = text
             if source["pages"] is not None and not isinstance(source["pages"], list):
                 errors.append(f"sources.{index}.pages must be an array or null")
         except (OSError, TypeError) as exc:
@@ -197,7 +181,7 @@ def validate(record: dict[str, Any], template: dict[str, Any]) -> tuple[list[str
         facts = []
     fact_ids: set[str] = set()
     for index, fact in enumerate(facts):
-        if not isinstance(fact, dict) or set(fact) != {"id", "category", "claim", "source_path", "quote", "page"}:
+        if not isinstance(fact, dict) or set(fact) != {"id", "category", "claim", "source_path", "page"}:
             errors.append(f"facts.{index} has an invalid shape")
             continue
         fact_id = fact.get("id")
@@ -212,11 +196,8 @@ def validate(record: dict[str, Any], template: dict[str, Any]) -> tuple[list[str
         if not isinstance(fact.get("claim"), str) or not fact["claim"].strip():
             errors.append(f"facts.{index}.claim is required")
         path = fact.get("source_path")
-        quote = fact.get("quote")
         if path not in source_paths:
             errors.append(f"facts.{index}.source_path is not indexed")
-        elif not isinstance(quote, str) or not quote.strip() or quote not in snapshots[path]:
-            errors.append(f"facts.{index}.quote is not verbatim in its snapshot")
         if fact.get("page") is not None and not isinstance(fact["page"], int):
             errors.append(f"facts.{index}.page must be an integer or null")
 

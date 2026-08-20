@@ -33,7 +33,7 @@ Tell the agent to:
 - Set `source` to exactly `LinkedIn`, `Personio`, `Other ATS`, `Pasted text`, or `Saved HTML`.
 - Use ISO `YYYY-MM-DD` dates. Keep required and preferred qualifications distinct.
 - Record `source_document` as the absolute `source.md` path and compute `source_sha256` from its exact bytes interpreted as UTF-8 text.
-- Add `field_evidence` entries for every non-null semantic scalar, non-`Unspecified` work model, and every array item. Keys use `field` or `field.<zero-based-index>`; values are arrays of exact quotations appearing in `source.md`.
+- Add `field_evidence` entries for every non-null semantic scalar, non-`Unspecified` work model, and every array item. Keys use `field` or `field.<zero-based-index>`; values are arrays of evidence references or summaries pointing to the source.
 - Set `extracted_at` to a timezone-aware ISO-8601 timestamp, not a date alone.
 - Set `extraction_status` to `complete` when company, role, source type, and substantive responsibilities or requirements are available. Pasted text needs no URL or job ID. Use `missing_fields` only for readiness blockers; put absent optional metadata in `warnings`. Otherwise use `partial` or `blocked`.
 - Write both files before reporting completion. Return only a short status summary to the parent.

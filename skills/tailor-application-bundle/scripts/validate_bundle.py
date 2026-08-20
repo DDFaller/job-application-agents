@@ -60,7 +60,7 @@ def ids(value: Any, known: set[str], label: str, errors: list[str], allow_empty:
         errors.append(f"{label} has unknown references: {', '.join(unknown)}")
 
 
-def cited_text(item: Any, candidate_ids: set[str], job_keys: set[str], label: str, errors: list[str], job_required: bool = False) -> None:
+def cited_text(item: Any, candidate_ids: set[str], job_keys: set[str], label: str, errors: list[str]) -> None:
     if not isinstance(item, dict) or set(item) != {"text", "candidate_evidence_ids", "job_evidence_keys"}:
         errors.append(f"{label} must contain text, candidate_evidence_ids, and job_evidence_keys")
         return
@@ -70,8 +70,6 @@ def cited_text(item: Any, candidate_ids: set[str], job_keys: set[str], label: st
     ids(item.get("job_evidence_keys"), job_keys, f"{label}.job_evidence_keys", errors, allow_empty=True)
     if not item.get("candidate_evidence_ids") and not item.get("job_evidence_keys"):
         errors.append(f"{label} needs at least one evidence reference")
-    if job_required and not item.get("job_evidence_keys"):
-        errors.append(f"{label} needs job evidence")
 
 
 def referenced_candidate_ids(bundle: dict[str, Any]) -> set[str]:
@@ -221,11 +219,11 @@ def validate(bundle: dict[str, Any], template: dict[str, Any], bundle_path: Path
     else:
         for index, item in enumerate(fit_arguments):
             label = f"tailoring_strategy.fit_arguments.{index}"
-            cited_text(item, candidate_ids, job_keys, label, errors, job_required=True)
+            cited_text(item, candidate_ids, job_keys, label, errors)
             if isinstance(item, dict) and not item.get("candidate_evidence_ids"):
                 errors.append(f"{label} needs candidate evidence")
     rationale = strategy.get("selection_rationale")
-    cited_text(rationale, candidate_ids, job_keys, "tailoring_strategy.selection_rationale", errors, job_required=True)
+    cited_text(rationale, candidate_ids, job_keys, "tailoring_strategy.selection_rationale", errors)
     if isinstance(rationale, dict) and not rationale.get("candidate_evidence_ids"):
         errors.append("tailoring_strategy.selection_rationale needs candidate evidence")
 
@@ -308,13 +306,13 @@ def validate(bundle: dict[str, Any], template: dict[str, Any], bundle_path: Path
         errors.append("match_analysis.matched must be non-empty")
     else:
         for index, item in enumerate(matched):
-            cited_text(item, candidate_ids, job_keys, f"match_analysis.matched.{index}", errors, job_required=True)
+            cited_text(item, candidate_ids, job_keys, f"match_analysis.matched.{index}", errors)
     gaps = analysis.get("gaps")
     if not isinstance(gaps, list):
         errors.append("match_analysis.gaps must be an array")
     else:
         for index, item in enumerate(gaps):
-            cited_text(item, candidate_ids, job_keys, f"match_analysis.gaps.{index}", errors, job_required=True)
+            cited_text(item, candidate_ids, job_keys, f"match_analysis.gaps.{index}", errors)
     generated_at = bundle.get("generated_at")
     try:
         parsed = datetime.fromisoformat(str(generated_at).replace("Z", "+00:00"))

@@ -75,7 +75,7 @@ is never written into the canonical source folder.
 | 2a | `$extract-job-opening` → Luna | Job URL or pasted text, job template | Retrieves exactly one public posting and writes the visible source plus normalized, evidence-backed job data. | `source.md` and `job.json`. |
 | 2b | Candidate-evidence cache/worker | Canonical manifest fingerprint, Markdown sources, candidate-evidence template | Reuses a validated cache entry or maps unchanged Markdown once while holding the fingerprint lock. | Hash-keyed `candidate-evidence.json` and receipt. |
 | 3a | `validate_job.py` | `job.json` | Checks schema, required fields, dates, source metadata, field evidence, and source hash. | Exit `0`: complete and ready; exit `1`: invalid; exit `2`: partial/blocked. |
-| 3b | `validate_candidate_evidence.py` | `candidate-evidence.json` | Checks schema, candidate readiness, source/snapshot paths and hashes, quotations, fact references, and timestamps. | Exit `0`: ready; exit `1`: invalid; exit `2`: not ready. |
+| 3b | `validate_candidate_evidence.py` | `candidate-evidence.json` | Checks schema, candidate readiness, source paths and hashes, fact references, and timestamps. | Exit `0`: ready; exit `1`: invalid; exit `2`: not ready. |
 | 4 | Same extraction agent, at most once | Exact validator errors | Repairs its own artifact without changing ownership or starting a replacement workflow. | A second validation attempt; unresolved failure stops tailoring. |
 | 5 | `prepare-job-application` gate | Validated job and candidate artifacts | Joins both branches and checks that neither is partial/blocked and that candidate identity/contact evidence exists. | Tailoring may begin, with the absolute candidate-evidence path preserved. |
 | 6 | Tailoring reuse handoff | `job.json`, per-run `candidate-evidence.json`, canonical Markdown directory | Passes the derived evidence index and Markdown context to Terra; canonical sources are never rewritten. | The exact per-run evidence path and source hashes are preserved. |
@@ -85,7 +85,7 @@ is never written into the canonical source folder.
 | 10 | Independent Luna review agent | Validated job, candidate evidence, bundle, review template | Judges job-family alignment, priority grounding, candidate relevance, focus compatibility, evidence-backed claims, and non-computing safeguards. | `tailoring-review.json` with `accept` or `revise`. |
 | 11 | `validate_tailoring_review.py` | `tailoring-review.json` | Checks review schema, referenced artifact paths/hashes, and verdict consistency. | Exit `0` plus reviewer verdict `accept` is required. |
 | 12 | Terra revision and fresh review, when needed | Review findings and current bundle | Applies one evidence-preserving revision, then repeats bundle validation and commissions a fresh review against the new bundle hash. | An independently accepted bundle or a stopped workflow. |
-| 13 | `render_bundle.py --stage` | Structurally valid `bundle.json`, application root, rendering profile | Runs concurrently with semantic review and creates temporary PDFs, exact verified input snapshots, and deterministic page/text results without publishing a version. | Non-current staging directory. |
+| 13 | `render_bundle.py --stage` | Structurally valid `bundle.json`, application root, rendering profile | Runs concurrently with semantic review and creates temporary PDFs, verified input artifacts, and deterministic page/text results without publishing a version. | Non-current staging directory. |
 | 14 | `render_bundle.py --promote` | Staging directory and accepted review | Binds the review to the exact staged bundle, embeds its receipt/hash, and atomically creates schema-2 `vNNN` plus `current.json`. | Review-backed immutable local version. |
 | 15 | `$notion-track-application` / Notion MCP | Local manifest and PDFs | Fetches the workspace, finds the exact database, deduplicates by canonical URL or source ID/company/role, uploads both PDFs concurrently after creating their targets, and upserts the record sequentially. | One synchronized `TO_APPLY` record with current document metadata. |
 | 16 | Parent completion | Local version and Notion result | Returns the local path, generated artifacts, evidence gaps, Notion status, and page URL. | User can review the application and decide whether to submit it manually. |
@@ -103,15 +103,15 @@ that accesses Notion.
 
 This agent is responsible for retrieving one public posting and preserving the
 visible posting text as evidence. It normalizes the posting into `job.json`,
-including field-level quotations, source type, source hash, extraction status,
+including field-level evidence references, source type, source hash, extraction status,
 and readiness warnings. It must not use credentials, bypass access controls,
 crawl in bulk, or submit an application.
 
 ### Luna candidate-evidence agent
 
 This agent is responsible for local candidate-document extraction. It preserves
-original paths and hashes, creates UTF-8 text snapshots, assigns stable fact
-IDs, and attaches exact quotations to candidate fields and facts. It owns one
+original paths and hashes, assigns stable fact
+IDs, and attaches evidence references to candidate fields and facts. It owns one
 repair pass. Its artifact is caller-owned after validation and must not be
 regenerated by tailoring.
 
@@ -166,6 +166,6 @@ A successful run returns:
 - The immutable application version directory under
   `applications/<company-slug>/<role-slug>/<job-id-or-url-hash>/vNNN/`.
 - Résumé and motivation-letter PDFs, match analysis, manifest, and input
-  snapshots.
+  evidence.
 - Any evidence gaps or unsupported job requirements.
 - Notion synchronization status and the deduplicated page URL.

@@ -60,8 +60,6 @@ class CandidateEvidenceCacheTests(unittest.TestCase):
             build = cache.begin(cache_root, key)
             entry = Path(build["staging_dir"])
             source = root / "experience.md"
-            snapshot = entry / "snapshots" / "experience.md.txt"
-            snapshot.write_bytes(source.read_bytes())
             evidence = entry / "candidate-evidence.json"
             record = {
                 "schema_version": 2,
@@ -73,13 +71,11 @@ class CandidateEvidenceCacheTests(unittest.TestCase):
                 "sources": [{
                     "path": str(source),
                     "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
-                    "snapshot_path": str(snapshot),
-                    "snapshot_sha256": hashlib.sha256(snapshot.read_bytes()).hexdigest(),
                     "pages": None,
                 }],
                 "facts": [{
                     "id": "E001", "category": "certification", "claim": "evidence",
-                    "source_path": str(source), "quote": "evidence", "page": None,
+                    "source_path": str(source), "page": None,
                 }],
                 "field_evidence": {
                     "candidate.name": ["E001"], "candidate.contact.0": ["E001"],

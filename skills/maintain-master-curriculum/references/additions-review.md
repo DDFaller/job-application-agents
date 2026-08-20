@@ -9,7 +9,7 @@ Each `changes` item contains exactly:
 - `action`: `add`, `modify`, or `remove`
 - `fact_id`: stable master fact ID
 - `before` and `after`: exact claim text without the bullet ID; use null on the absent side
-- `evidence`: non-empty `{source_id, quote}` citations. Use an input ID or current fact ID, quote verbatim, and include at least one input citation per change.
+- `evidence`: non-empty `{source_id, quote}` citations. Use an input ID or current fact ID, reference the source content, and include at least one input citation per change.
 - `verdict`: `accept`, `revise`, or `reject`
 - `rationale`: concise semantic review
 - `issues`: zero or more concise strings

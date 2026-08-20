@@ -20,7 +20,7 @@ or backfill event timestamps from worker prose.
 
 1. Read `references/workflow.md` and resolve the application root.
 2. Start the job-opening extraction branch, candidate-evidence cache lookup, and local rendering preflight concurrently. In managed mode, use the resolved canonical Markdown directory and manifest supplied by `$manage-job-applications`. Reuse a validated hash-keyed evidence cache entry; only run the mapping agent while holding a cache-build lock on a miss. Do not treat a state-root readiness report as required input.
-3. Join and validate the job artifact and the derived candidate-evidence index. Preserve the canonical Markdown directory, manifest, and exact source quotations for the next stage. Stop if either branch is partial/blocked or required identity/contact evidence is missing.
+3. Join and validate the job artifact and the derived candidate-evidence index. Preserve the canonical Markdown directory and source hashes for the next stage. Stop if either branch is partial/blocked or required identity/contact evidence is missing.
    If candidate mapping is unavailable, close the active event, record a
    `kind: wait` event, and return `needs_input`; do not pass provisional output
    to tailoring.

@@ -6,8 +6,8 @@ Report a hard blocker when application tailoring cannot safely start:
 
 - Canonical source directory is missing, empty, structurally invalid, or contains forbidden files.
 - Candidate name, at least one contact method, or usable evidence facts are absent.
-- A populated candidate identity field lacks exact quote-backed evidence.
-- Candidate evidence contains invalid paths, changed hashes, non-verbatim quotations, unknown references, or schema errors.
+- A populated candidate identity field lacks evidence-backed content.
+- Candidate evidence contains invalid paths, changed hashes, unknown references, or schema errors.
 - The live candidate-evidence validator returns `1` or cannot be run.
 - Current sources contain unresolved contradictions that could change identity, employment, education, or claimed qualifications.
 
