@@ -34,7 +34,7 @@ or backfill event timestamps from worker prose.
    to tailoring.
 4. Run the complete `$tailor-application-bundle` workflow in reuse mode with the derived per-run evidence index and canonical Markdown context. Require its job-family classification, job-priority/evidence partition, compatible document focus, structural validation, and independent semantic review. Do not replace it with an abbreviated writer-only call.
 5. Start temporary XeLaTeX rendering concurrently with the distinct independent semantic-review agent. Promote the staged artifacts only after the exact bundle receives a validated `accept` verdict. No visual inspection is required.
-6. Upsert the Notion record in `TO_APPLY` only after local success.
+6. Upsert the Notion record in `TO_APPLY` only after local success. The Notion synchronization must include the current resume and motivation-letter PDFs and the editable LaTeX sources (`resume.tex`, `letter.tex`, and `preamble.tex`); when individual `.tex` uploads are unsupported, attach a versioned ZIP containing those exact raw files.
 7. Return the local version directory and Notion page URL. Do not submit the application.
 
 If Notion fails, keep the local bundle and retry synchronization from its manifest; do not regenerate documents. If extraction fails, request pasted content rather than bypassing authentication.
