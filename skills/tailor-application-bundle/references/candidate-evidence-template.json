@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "extraction_status": "complete",
   "candidate": {
     "name": null,
@@ -10,6 +10,10 @@
   },
   "sources": [],
   "facts": [],
+  "records": {
+    "experience": [],
+    "education": []
+  },
   "field_evidence": {},
   "missing_fields": [],
   "warnings": [],

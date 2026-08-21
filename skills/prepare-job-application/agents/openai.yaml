@@ -1,7 +1,7 @@
 interface:
   display_name: "Prepare Job Application"
   short_description: "Prepare one application with live progress"
-  default_prompt: "Use $prepare-job-application to prepare this opening with multiple agents, editable LaTeX documents, independent review, live status, and Notion tracking."
+  default_prompt: "Use $prepare-job-application to prepare this opening from neutral facts and an approved role profile, with the editable geographic LaTeX template, independent review, live status, and Notion tracking."
 dependencies:
   tools:
     - type: "mcp"

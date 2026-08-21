@@ -48,7 +48,7 @@ active elapsed time. Only the coordinator may finalize the ledger.
 
 ## Route the request
 
-- New or updated candidate evidence: delegate `$maintain-master-curriculum` and preserve its approval gate.
+- New or updated candidate evidence or role profiles: delegate `$maintain-master-curriculum` and preserve its separate approval gates.
 - One complete application: delegate `$prepare-job-application`.
 - Opening extraction only: delegate `$extract-job-opening`.
 - Documents from an already validated opening: delegate `$tailor-application-bundle`.
@@ -63,11 +63,10 @@ Delegate every live board review to `$requeue-unanswered-applications`. Its norm
 ## Coordinate an application queue
 
 1. Normalize each item to a public URL or pasted description and assign a stable queue label. Do not retrieve authenticated or private postings.
-2. Check that the canonical curriculum exists and is ready. If it needs changes, run one curriculum-maintenance delegation first and stop for the user's explicit approval before committing those changes.
-   Before routing a complete application, run the master-curriculum source
-   resolver against `sources/current.json`. It verifies the live Markdown
-   hashes. Pass the resolved source directory and manifest to the worker; do
-   not require a state-root readiness report, receipt, or generated profile.
+2. Check that the canonical curriculum and approved role-profile catalog exist and are mutually compatible. If facts or profiles need changes, run one curriculum-maintenance delegation first and stop for explicit approval before publishing.
+   Run the source resolver against `sources/current.json` and the profile
+   resolver against `<state-root>/profiles/current.json`. Pass both resolved
+   manifests to the worker. Never accept a stale profile catalog.
 3. For every ready item, prepare a clean-context subagent task with `fork_turns: none`. Tell it to use `$prepare-job-application`, provide the opening, resolved source manifest and Markdown directory, and require a concise result containing status, artifact directory, Notion URL, and blockers.
 4. Spawn the largest safe batch of independent application workers concurrently before waiting. Keep the parent agent free to coordinate results and reserve capacity for the nested extraction and review agents required by `$prepare-job-application`. As workers finish, immediately fill available slots from the remaining queue. Use a single-worker batch only when the actual concurrency limit or a dependency requires it.
 5. Retry only the failed stage. If Notion synchronization fails after local success, delegate `$notion-track-application` using the existing manifest; never regenerate accepted documents just to retry tracking.
@@ -75,6 +74,9 @@ Delegate every live board review to `$requeue-unanswered-applications`. Its norm
    fresh attempt number and staging directory. Revalidate the resulting
    per-run index against the Markdown manifest before opening tailoring. Never
    tailor from a provisional or unvalidated index.
+   If tailoring returns `profile-proposal.json`, route it to
+   `$maintain-master-curriculum`, finalize the application as `needs_input`, and
+   wait for approval. Never auto-publish it or use a generic fallback.
 6. Return a compact queue summary with `prepared`, `needs input`, or `failed` for every item and the corresponding artifact or blocker.
 
 ## Backfill a live Notion queue

@@ -5,6 +5,8 @@
     "job_sha256": null,
     "candidate_evidence_json": null,
     "candidate_evidence_sha256": null,
+    "role_profiles_json": null,
+    "role_profiles_sha256": null,
     "bundle_json": null,
     "bundle_sha256": null
   },
@@ -13,7 +15,13 @@
     "priorities_job_grounded": null,
     "selected_evidence_relevant": null,
     "document_focus_appropriate": null,
-    "claims_evidence_backed": null
+    "claims_evidence_backed": null,
+    "profile_selected_from_approved_catalog": null,
+    "profile_score_and_seniority_supported": null,
+    "employment_relationships_clear": null,
+    "education_credentials_clear": null,
+    "language_and_text_quality": null,
+    "ats_reading_order": null
   },
   "findings": [],
   "verdict": null,

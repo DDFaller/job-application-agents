@@ -16,8 +16,9 @@ SUBPROCESS_TIMEOUT_SECONDS = 60
 
 from validate_master_sources import PROFILE_PHOTOS, read_facts, source_hashes
 
-TOP = {"schema_version", "status", "source_version", "source_dir", "source_hashes", "candidate_evidence", "hard_blockers", "quality_gaps", "coverage", "generated_at"}
+TOP = {"schema_version", "status", "source_version", "source_dir", "source_hashes", "candidate_evidence", "role_profiles", "hard_blockers", "quality_gaps", "coverage", "generated_at"}
 CANDIDATE = {"path", "sha256", "validator_path", "validator_exit"}
+ROLE_PROFILES = {"status", "state_root", "resolver_path", "resolver_exit", "catalog_path", "catalog_sha256"}
 COVERAGE_KEYS = {"identity", "contact", "profile", "experience", "projects", "education", "skills", "languages", "certifications"}
 COVERAGE_VALUES = {"covered", "partial", "missing", "not_applicable"}
 
@@ -65,8 +66,8 @@ def validate(report: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     if set(report) != TOP:
         errors.append("report fields do not match the readiness template")
-    if report.get("schema_version") != 1:
-        errors.append("schema_version must be 1")
+    if report.get("schema_version") != 2:
+        errors.append("schema_version must be 2")
     if report.get("status") not in {"ready", "needs_input", "blocked"}:
         errors.append("status must be ready, needs_input, or blocked")
     if not nonempty(report.get("source_version")):
@@ -116,6 +117,37 @@ def validate(report: dict[str, Any]) -> list[str]:
         expected = {str((source / name).resolve()) for name in actual_hashes if name not in PROFILE_PHOTOS}
         if indexed != expected:
             errors.append("candidate evidence must index exactly the canonical source files")
+
+    profiles_view = report.get("role_profiles")
+    if not isinstance(profiles_view, dict) or set(profiles_view) != ROLE_PROFILES:
+        errors.append("role_profiles must match the readiness template")
+    else:
+        profile_status = profiles_view.get("status")
+        if profile_status not in {"ready", "missing", "stale"}:
+            errors.append("role_profiles.status must be ready, missing, or stale")
+        try:
+            state_root = Path(profiles_view["state_root"]).expanduser().resolve()
+            resolver = Path(profiles_view["resolver_path"]).expanduser().resolve()
+            if not resolver.is_file():
+                errors.append("role profile resolver does not exist")
+            else:
+                result = subprocess.run(
+                    [sys.executable, str(resolver), "--state-root", str(state_root)],
+                    capture_output=True, text=True, check=False, timeout=SUBPROCESS_TIMEOUT_SECONDS,
+                )
+                if result.returncode not in {0, 2} or profiles_view.get("resolver_exit") != result.returncode:
+                    errors.append("reported role profile resolver exit does not match live resolver")
+                if result.returncode == 0:
+                    resolved = json.loads(result.stdout)
+                    catalog = Path(resolved["catalog"]).expanduser().resolve()
+                    if profile_status != "ready":
+                        errors.append("role_profiles.status must be ready when resolver succeeds")
+                    if str(catalog) != profiles_view.get("catalog_path") or digest(catalog) != profiles_view.get("catalog_sha256"):
+                        errors.append("role profile catalog path or hash does not match resolver output")
+                elif profile_status == "ready":
+                    errors.append("role_profiles.status cannot be ready when resolver fails")
+        except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError, subprocess.TimeoutExpired) as exc:
+            errors.append(f"cannot verify role profiles: {exc}")
 
     validate_objects(report.get("hard_blockers"), {"code", "message"}, "hard_blockers", errors)
     validate_objects(report.get("quality_gaps"), {"category", "message", "question"}, "quality_gaps", errors)
