@@ -74,7 +74,7 @@ Then restart Codex. Setup preserves other personal marketplace entries and repla
 
 ## Candidate evidence safety
 
-During the first-use curriculum step above, Codex previews the exact evidence library update and waits for approval. Do not copy the example files from this repository into your personal source directory as real facts.
+During the first-use curriculum step above, Codex previews the exact factual evidence update and waits for approval. It then discovers or assesses role profiles in a separate catalog, commissions an independent review, and asks for separate approval before publishing them. Do not copy the example files from this repository into your personal source directory as real facts.
 
 ## Editable LaTeX documents
 
@@ -82,7 +82,7 @@ XeLaTeX is the default renderer. Every current application version contains:
 
 - `resume.tex`, `letter.tex`, and `preamble.tex` for editing;
 - `resume.pdf` and `motivation-letter.pdf`;
-- job and candidate-evidence snapshots, review receipts, and a manifest.
+- job, candidate-evidence, and approved role-profile snapshots, review receipts, and a manifest.
 
 You may edit the `.tex` files directly in the version referenced by `current.json`. Rebuild them with:
 
@@ -93,7 +93,16 @@ python3 skills/tailor-application-bundle/scripts/render_bundle.py \
 
 The rebuild archives a recoverable revision, recompiles both PDFs, checks page count and extractable text, and refreshes hashes. Layout-only changes keep the semantic review valid. Text changes mark it stale and must receive a fresh evidence review before Notion synchronization. Ask Codex to “review my manual LaTeX edits and refresh the current application”; it assigns a separate reviewer and records acceptance against the exact PDF text hashes. Older, non-current versions must not be edited.
 
-RenderCV remains an optional compatibility fallback. Install it with `python3 scripts/setup.py --with-rendercv` and select it explicitly with `--render-engine rendercv`.
+The renderer automatically uses the preserved US Letter international template for jobs outside France and the preserved A4 two-column French template for jobs in France. The French profile uses the approved `~/Documents/job-search/sources/profile-photo.jpg`; XeLaTeX is the only rendering engine.
+
+To add a reusable local XeLaTeX résumé design, ask Codex to use
+`$add-latex-template` with the project path and a new template slug. The skill
+removes sample candidate content, adapts every supported résumé entry type,
+compiles an ATS compatibility probe, and previews the complete change before
+requiring explicit approval. Select an installed design explicitly with
+`render_bundle.py --template <slug>`; omitting the option keeps automatic
+geographic template selection. Each application stores an exact snapshot, so later edits to the
+shared template affect only future applications.
 
 ## Diagnose and test
 
@@ -116,7 +125,8 @@ If Notion is disconnected, run `codex mcp login notion`. If Codex does not show 
 - `manage-job-applications` coordinates queues and live progress.
 - `prepare-job-application` runs one complete multi-agent application.
 - `extract-job-opening` extracts one public posting.
-- `maintain-master-curriculum` maintains approved candidate evidence.
+- `maintain-master-curriculum` maintains neutral candidate evidence and a separate approved role-profile catalog.
+- `add-latex-template` safely adapts and installs reusable local XeLaTeX résumé projects.
 - `tailor-application-bundle` writes, reviews, renders, and rebuilds documents.
 - `notion-track-application` deduplicates and tracks bundles.
 - `requeue-unanswered-applications` moves qualifying stale `APPLIED` cards to `REAPPLY`.

@@ -1,6 +1,6 @@
 # Canonical source layout
 
-Keep only current, user-approved Markdown evidence and the optional approved CV portrait in the canonical source directory. Use these filenames:
+Keep only current, user-approved Markdown evidence and the optional approved CV portrait in the canonical source directory. This directory is factual and profile-neutral: never add role profiles, target-job narratives, generated headlines, scores, or job keywords. Use these filenames:
 
 - `identity.md` — name, headline, location, contact methods, professional and portfolio links
 - `experience.md` — employers, roles, dates, responsibilities, technologies, and outcomes
@@ -32,6 +32,13 @@ Use headings for organization, not factual claims. Keep one independently quotab
 - Treat an explicitly approved user statement as a canonical fact without adding a lower-confidence label.
 - Reconcile contradictions by asking the user; do not keep mutually incompatible current facts.
 - Do not turn GitLab CI usage into general Git knowledge, exposure into proficiency, team outcomes into personal outcomes, or project work into employment.
+- For employment or independent work, state legal employer, contracting party,
+  client, engagement type, and official title as separate facts when known. Do
+  not use `at <client>` as evidence of employment.
+- For education, state institution, official degree or certificate, field,
+  track, completion status, credential awarded, and dates separately when
+  known. Do not translate a Brazilian lato sensu specialization to a master's
+  degree or use a framework equivalence such as `BAC+5` as the credential.
 - Do not create quantified impact from qualitative wording.
 - Do not store subjective impressions, speculation, or explicitly unmeasured outcomes as canonical application facts.
 - Use full URLs for links and label the destination.

@@ -15,6 +15,7 @@ TEST_DIRS = (
     ROOT / "skills" / "manage-job-applications" / "scripts",
     ROOT / "skills" / "maintain-master-curriculum" / "scripts",
     ROOT / "skills" / "tailor-application-bundle" / "scripts",
+    ROOT / "skills" / "add-latex-template" / "scripts",
 )
 
 

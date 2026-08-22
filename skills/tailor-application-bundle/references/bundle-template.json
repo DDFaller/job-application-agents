@@ -1,10 +1,12 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "inputs": {
     "job_json": null,
     "job_sha256": null,
     "candidate_evidence_json": null,
-    "candidate_evidence_sha256": null
+    "candidate_evidence_sha256": null,
+    "role_profiles_json": null,
+    "role_profiles_sha256": null
   },
   "job": {
     "company": null,
@@ -14,6 +16,12 @@
   "tailoring_strategy": {
     "job_family": null,
     "document_focus": null,
+    "profile_ranking": [],
+    "selected_profile_id": null,
+    "selected_profile_anchor_evidence_ids": [],
+    "selected_profile_supporting_evidence_ids": [],
+    "positioning_candidate_evidence_ids": [],
+    "claim_scores": [],
     "job_priorities": [],
     "selected_candidate_evidence_ids": [],
     "deprioritized_candidate_evidence_ids": [],
@@ -47,7 +55,8 @@
   },
   "match_analysis": {
     "matched": [],
-    "gaps": []
+    "gaps": [],
+    "credibility_warnings": []
   },
   "generated_at": null
 }

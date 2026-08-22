@@ -50,6 +50,7 @@ def validate(review: dict[str, Any], template: dict[str, Any]) -> list[str]:
     pairs = (
         ("job_json", "job_sha256"),
         ("candidate_evidence_json", "candidate_evidence_sha256"),
+        ("role_profiles_json", "role_profiles_sha256"),
         ("bundle_json", "bundle_sha256"),
     )
     for path_key, hash_key in pairs:
@@ -65,7 +66,7 @@ def validate(review: dict[str, Any], template: dict[str, Any]) -> list[str]:
             artifacts[path_key] = load_bytes(data, path)
         except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
             errors.append(f"cannot verify {path_key}: {exc}")
-    if set(artifacts) != {"job_json", "candidate_evidence_json", "bundle_json"}:
+    if set(artifacts) != {"job_json", "candidate_evidence_json", "role_profiles_json", "bundle_json"}:
         return errors
 
     bundle_inputs = artifacts["bundle_json"].get("inputs")
@@ -75,6 +76,7 @@ def validate(review: dict[str, Any], template: dict[str, Any]) -> list[str]:
         for path_key, hash_key in (
             ("job_json", "job_sha256"),
             ("candidate_evidence_json", "candidate_evidence_sha256"),
+            ("role_profiles_json", "role_profiles_sha256"),
         ):
             try:
                 review_path = str(Path(inputs[path_key]).expanduser().resolve())

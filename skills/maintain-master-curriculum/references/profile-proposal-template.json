@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "inputs": {
+    "catalog_json": null,
+    "catalog_sha256": null,
+    "job_json": null,
+    "job_sha256": null,
+    "candidate_evidence_json": null,
+    "candidate_evidence_sha256": null
+  },
+  "reason": null,
+  "requested_profile": null,
+  "proposed_profile": null,
+  "gaps": [],
+  "generated_at": null
+}

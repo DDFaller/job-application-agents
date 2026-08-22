@@ -19,13 +19,13 @@ class ProfileTests(unittest.TestCase):
             "candidate": {"name": "Ada Example", "headline": "Engineer", "location": None,
                           "contact": ["ada@example.test"], "languages": ["English — C1"]},
             "facts": [{"id": "E001", "category": "experience", "claim": "Built APIs.",
-                       "source_path": "/sources/experience.md", "quote": "- [MC-EXP-001] Built APIs."}],
+                       "source_path": "/sources/experience.md", "source_fact_ids": ["MC-EXP-001"]}],
             "missing_fields": ["location"], "warnings": []
         }
         report = {"source_version": "v007"}
         result = publish.profile_markdown(evidence, Path("/sources"), report)
         self.assertIn("`E001` Built APIs.", result)
-        self.assertIn("Quote: - [MC-EXP-001] Built APIs.", result)
+        self.assertIn("Canonical facts: `MC-EXP-001`", result)
         self.assertIn("Missing: location", result)
         self.assertNotIn("Ada Example is", result)
 

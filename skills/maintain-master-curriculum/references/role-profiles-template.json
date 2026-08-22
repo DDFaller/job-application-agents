@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "catalog_status": "staged",
+  "source_manifest": {
+    "path": null,
+    "sha256": null,
+    "fingerprint": null
+  },
+  "profiles": [],
+  "generated_at": null
+}

@@ -19,6 +19,16 @@ CATEGORIES = {
     "identity", "contact", "profile", "experience", "project", "education",
     "certification", "skill", "language",
 }
+ENGAGEMENT_TYPES = {"employee", "intern", "apprentice", "contractor", "freelancer"}
+EDUCATION_STATUSES = {"completed", "in_progress"}
+EXPERIENCE_FIELDS = {
+    "id", "legal_employer", "contracting_party", "client", "engagement_type",
+    "official_title", "normalized_role_family", "dates", "achievement_fact_ids", "evidence_ids",
+}
+EDUCATION_FIELDS = {
+    "id", "institution", "official_degree", "field", "track", "status",
+    "credential_awarded", "dates", "evidence_ids",
+}
 
 
 def load_bytes(data: bytes, path: Path) -> dict[str, Any]:
@@ -120,6 +130,10 @@ def string_list(value: Any) -> bool:
     return isinstance(value, list) and all(isinstance(item, str) and item.strip() for item in value)
 
 
+def nullable_string(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and bool(value.strip()))
+
+
 def validate(record: dict[str, Any], template: dict[str, Any]) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     notices: list[str] = []
@@ -130,8 +144,8 @@ def validate(record: dict[str, Any], template: dict[str, Any]) -> tuple[list[str
             errors.append("missing fields: " + ", ".join(missing))
         if extra:
             errors.append("unexpected fields: " + ", ".join(extra))
-    if record.get("schema_version") != 2:
-        errors.append("schema_version must be 2")
+    if record.get("schema_version") != 3:
+        errors.append("schema_version must be 3")
     status = record.get("extraction_status")
     if status not in STATUSES:
         errors.append("extraction_status must be complete, partial, or blocked")
@@ -157,6 +171,7 @@ def validate(record: dict[str, Any], template: dict[str, Any]) -> tuple[list[str
         errors.append("sources must be an array")
         sources = []
     source_paths: set[str] = set()
+    source_fact_ids_by_path: dict[str, set[str]] = {}
     for index, source in enumerate(sources):
         if not isinstance(source, dict):
             errors.append(f"sources.{index} must be an object")
@@ -170,6 +185,11 @@ def validate(record: dict[str, Any], template: dict[str, Any]) -> tuple[list[str
             if not original.is_file() or file_hash(original) != source["sha256"]:
                 errors.append(f"sources.{index} original file hash mismatch")
             source_paths.add(str(original))
+            try:
+                text = original.read_text(encoding="utf-8") if original.suffix.lower() in {".md", ".txt"} else ""
+            except (OSError, UnicodeError):
+                text = ""
+            source_fact_ids_by_path[str(original)] = set(re.findall(r"\[(MC-[A-Z]+-\d{3,})\]", text))
             if source["pages"] is not None and not isinstance(source["pages"], list):
                 errors.append(f"sources.{index}.pages must be an array or null")
         except (OSError, TypeError) as exc:
@@ -181,7 +201,7 @@ def validate(record: dict[str, Any], template: dict[str, Any]) -> tuple[list[str
         facts = []
     fact_ids: set[str] = set()
     for index, fact in enumerate(facts):
-        if not isinstance(fact, dict) or set(fact) != {"id", "category", "claim", "source_path", "page"}:
+        if not isinstance(fact, dict) or set(fact) != {"id", "category", "claim", "source_path", "page", "source_fact_ids"}:
             errors.append(f"facts.{index} has an invalid shape")
             continue
         fact_id = fact.get("id")
@@ -200,6 +220,80 @@ def validate(record: dict[str, Any], template: dict[str, Any]) -> tuple[list[str
             errors.append(f"facts.{index}.source_path is not indexed")
         if fact.get("page") is not None and not isinstance(fact["page"], int):
             errors.append(f"facts.{index}.page must be an integer or null")
+        source_fact_ids = fact.get("source_fact_ids")
+        if not isinstance(source_fact_ids, list) or any(
+            not isinstance(item, str) or not re.fullmatch(r"MC-[A-Z]+-\d{3,}", item)
+            for item in source_fact_ids
+        ) or len(set(source_fact_ids)) != len(source_fact_ids):
+            errors.append(f"facts.{index}.source_fact_ids must be a unique MC-* ID array")
+        elif set(source_fact_ids) - source_fact_ids_by_path.get(str(path), set()):
+            errors.append(f"facts.{index}.source_fact_ids are not present in source_path")
+
+    records = record.get("records")
+    if not isinstance(records, dict) or set(records) != {"experience", "education"}:
+        errors.append("records must contain experience and education arrays")
+        records = {"experience": [], "education": []}
+    for record_type in ("experience", "education"):
+        if not isinstance(records.get(record_type), list):
+            errors.append(f"records.{record_type} must be an array")
+            records[record_type] = []
+    record_ids: set[str] = set()
+    for index, item in enumerate(records.get("experience", [])):
+        label = f"records.experience.{index}"
+        if not isinstance(item, dict) or set(item) != EXPERIENCE_FIELDS:
+            errors.append(f"{label} has an invalid shape")
+            continue
+        record_id = item.get("id")
+        if not isinstance(record_id, str) or not re.fullmatch(r"X\d{3}", record_id) or record_id in record_ids:
+            errors.append(f"{label}.id must be a unique X###")
+        else:
+            record_ids.add(record_id)
+        for field in ("legal_employer", "contracting_party", "client", "normalized_role_family", "dates"):
+            if not nullable_string(item.get(field)):
+                errors.append(f"{label}.{field} must be null or a non-empty string")
+        if not isinstance(item.get("official_title"), str) or not item["official_title"].strip():
+            errors.append(f"{label}.official_title is required")
+        engagement = item.get("engagement_type")
+        if engagement not in ENGAGEMENT_TYPES:
+            errors.append(f"{label}.engagement_type is invalid")
+        if engagement in {"employee", "intern", "apprentice"} and not item.get("legal_employer"):
+            errors.append(f"{label} employment requires legal_employer")
+        if engagement in {"contractor", "freelancer"} and not item.get("contracting_party"):
+            errors.append(f"{label} independent work requires contracting_party")
+        for field in ("achievement_fact_ids", "evidence_ids"):
+            value = item.get(field)
+            if not string_list(value) or (field == "evidence_ids" and not value):
+                errors.append(f"{label}.{field} must be {'a non-empty' if field == 'evidence_ids' else 'a'} fact ID array")
+            elif set(value) - fact_ids:
+                errors.append(f"{label}.{field} has unknown fact IDs")
+        if set(item.get("achievement_fact_ids", [])) - set(item.get("evidence_ids", [])):
+            errors.append(f"{label}.achievement_fact_ids must be included in evidence_ids")
+
+    for index, item in enumerate(records.get("education", [])):
+        label = f"records.education.{index}"
+        if not isinstance(item, dict) or set(item) != EDUCATION_FIELDS:
+            errors.append(f"{label} has an invalid shape")
+            continue
+        record_id = item.get("id")
+        if not isinstance(record_id, str) or not re.fullmatch(r"D\d{3}", record_id) or record_id in record_ids:
+            errors.append(f"{label}.id must be a unique D###")
+        else:
+            record_ids.add(record_id)
+        for field in ("institution", "official_degree", "field"):
+            if not isinstance(item.get(field), str) or not item[field].strip():
+                errors.append(f"{label}.{field} is required")
+        for field in ("track", "dates"):
+            if not nullable_string(item.get(field)):
+                errors.append(f"{label}.{field} must be null or a non-empty string")
+        if item.get("status") not in EDUCATION_STATUSES:
+            errors.append(f"{label}.status must be completed or in_progress")
+        if not isinstance(item.get("credential_awarded"), bool):
+            errors.append(f"{label}.credential_awarded must be boolean")
+        if item.get("status") == "in_progress" and item.get("credential_awarded"):
+            errors.append(f"{label} cannot award an in-progress credential")
+        value = item.get("evidence_ids")
+        if not string_list(value) or not value or set(value) - fact_ids:
+            errors.append(f"{label}.evidence_ids must be a non-empty known fact ID array")
 
     mapping = record.get("field_evidence")
     if not isinstance(mapping, dict):

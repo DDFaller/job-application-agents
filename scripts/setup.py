@@ -17,18 +17,35 @@ from pathlib import Path
 
 PLUGIN_NAME = "job-application-agents"
 MARKETPLACE_NAME = "personal"
-REQUIRED_TOOLS = ("python3", "codex", "xelatex", "pdfinfo", "pdftotext")
+REQUIRED_TOOLS = ("python3", "codex", "xelatex", "kpsewhich", "pdfinfo", "pdftotext")
 
 
 def command_exists(name: str) -> bool:
     return shutil.which(name) is not None
 
 
+def missing_latex_packages() -> list[str]:
+    kpsewhich = shutil.which("kpsewhich")
+    if not kpsewhich:
+        return ["kpsewhich"]
+    required = (
+        "fontspec.sty", "geometry.sty", "xcolor.sty", "titlesec.sty",
+        "fancyhdr.sty", "enumitem.sty", "graphicx.sty", "hyperref.sty", "tabularx.sty",
+        "fontawesome5.sty", "mfirstuc.sty", "parskip.sty", "tikz.sty", "adjustbox.sty",
+    )
+    missing = []
+    for package in required:
+        result = subprocess.run([kpsewhich, package], text=True, capture_output=True, check=False)
+        if result.returncode or not result.stdout.strip():
+            missing.append(package)
+    return missing
+
+
 def dependency_commands() -> list[list[str]]:
     if command_exists("dnf"):
-        return [["sudo", "dnf", "install", "-y", "texlive-xetex", "texlive-collection-fontsrecommended", "poppler-utils"]]
+        return [["sudo", "dnf", "install", "-y", "texlive-xetex", "texlive-collection-fontsrecommended", "texlive-collection-latexextra", "poppler-utils"]]
     if command_exists("apt-get"):
-        return [["sudo", "apt-get", "install", "-y", "texlive-xetex", "texlive-fonts-recommended", "poppler-utils", "python3-venv"]]
+        return [["sudo", "apt-get", "install", "-y", "texlive-xetex", "texlive-fonts-recommended", "texlive-latex-extra", "poppler-utils", "python3-venv"]]
     if command_exists("brew"):
         return [["brew", "install", "--cask", "mactex-no-gui"], ["brew", "install", "poppler"]]
     return []
@@ -111,19 +128,13 @@ def write_rules(home: Path, plugins: list[Path]) -> Path:
     return path
 
 
-def install_rendercv(plugin: Path) -> None:
-    skill = plugin / "skills" / "tailor-application-bundle"
-    venv = skill / ".venv"
-    if not (venv / "bin" / "python").exists():
-        run([sys.executable, "-m", "venv", str(venv)])
-    run([str(venv / "bin" / "python"), "-m", "pip", "install", "rendercv[full]==2.8"])
-
-
 def readiness(repo: Path, data_root: Path) -> tuple[list[str], list[str]]:
     ready: list[str] = []
     blocked: list[str] = []
     for tool in REQUIRED_TOOLS:
         (ready if command_exists(tool) else blocked).append(f"tool: {tool}")
+    for package in missing_latex_packages() if command_exists("kpsewhich") else []:
+        blocked.append(f"latex package: {package}")
     if (repo / ".codex-plugin" / "plugin.json").is_file():
         ready.append("plugin manifest")
     else:
@@ -139,7 +150,6 @@ def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--check", action="store_true", help="diagnose without changing anything")
     result.add_argument("--data-root", type=Path, default=Path.home() / "Documents" / "job-search")
-    result.add_argument("--with-rendercv", action="store_true", help="also install the legacy RenderCV fallback")
     result.add_argument("--skip-notion-login", action="store_true")
     return result
 
@@ -159,9 +169,11 @@ def main() -> int:
 
     missing = [name for name in REQUIRED_TOOLS if not command_exists(name)]
     system_missing = [name for name in missing if name not in {"python3", "codex"}]
-    if system_missing:
+    latex_missing = missing_latex_packages() if command_exists("kpsewhich") else []
+    if system_missing or latex_missing:
         commands = dependency_commands()
-        print("Missing rendering tools: " + ", ".join(system_missing))
+        details = system_missing + [f"LaTeX {name}" for name in latex_missing]
+        print("Missing rendering dependencies: " + ", ".join(details))
         if commands:
             print("Proposed package commands:")
             for command in commands:
@@ -182,9 +194,6 @@ def main() -> int:
     plugin.parent.mkdir(parents=True, exist_ok=True)
     copy_plugin(repo, plugin)
     marketplace, marketplace_name = update_marketplace(home)
-    if args.with_rendercv:
-        install_rendercv(plugin)
-
     result = subprocess.run(["codex", "plugin", "add", f"{PLUGIN_NAME}@{marketplace_name}"], text=True)
     if result.returncode:
         print("Plugin registration needs attention; rerun setup after resolving the Codex message above.", file=sys.stderr)

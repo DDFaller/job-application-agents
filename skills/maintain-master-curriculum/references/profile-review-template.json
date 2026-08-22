@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "inputs": {
+    "catalog_json": null,
+    "catalog_sha256": null
+  },
+  "checks": {
+    "source_grounded": null,
+    "anchors_and_support_sufficient": null,
+    "seniority_supported": null,
+    "positioning_coherent": null,
+    "risks_explicit": null
+  },
+  "findings": [],
+  "verdict": null,
+  "reviewed_at": null
+}

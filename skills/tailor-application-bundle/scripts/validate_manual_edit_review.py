@@ -12,7 +12,8 @@ from pathlib import Path
 
 CHECKS = {
     "claims_supported", "job_alignment_preserved", "candidate_identity_preserved",
-    "unsupported_claims_absent", "documents_coherent",
+    "unsupported_claims_absent", "documents_coherent", "selected_profile_preserved",
+    "employment_and_education_clear", "language_and_ats_order_clear",
 }
 
 
@@ -36,7 +37,10 @@ def validate(review: dict, version_dir: Path) -> list[str]:
     if review.get("document_text_sha256") != manifest.get("document_text_sha256"):
         errors.append("document text hashes do not match the current PDFs")
     inputs = review.get("inputs", {})
-    for key, snapshot in (("job", "job.json"), ("candidate_evidence", "candidate-evidence.json")):
+    for key, snapshot in (
+        ("job", "job.json"), ("candidate_evidence", "candidate-evidence.json"),
+        ("role_profiles", "role-profiles.json"),
+    ):
         path_key = key + "_json"
         hash_key = key + "_sha256"
         expected_path = (version_dir / snapshot).resolve()

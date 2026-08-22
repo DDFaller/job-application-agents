@@ -1,0 +1,4 @@
+interface:
+  display_name: "Add LaTeX Template"
+  short_description: "Adapt and register reusable XeLaTeX CVs"
+  default_prompt: "Use $add-latex-template to adapt and register this local XeLaTeX résumé project for tailored applications."

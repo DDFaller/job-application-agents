@@ -1,6 +1,31 @@
 # Job-driven tailoring
 
-Treat the normalized opening as the selection lens and candidate evidence as the only source of candidate facts. Use the opening to change emphasis, not to erase stable CV context. Selection is a two-pass process: first preserve compact baseline context, then rank job-specific evidence.
+Treat the normalized opening as the selection lens and candidate evidence as the only source of candidate facts. Use the opening to change emphasis, not to erase stable CV context. Select an approved role profile first, then preserve compact baseline context and rank remaining job-specific evidence.
+
+## Approved profile selection
+
+Use the role-profile catalog as a positioning boundary, never as candidate
+evidence. For every approved profile, map its stable `MC-*` facts through the
+candidate facts' `source_fact_ids`. Score every relevant mapped claim from `0`
+through `3` on relevance, evidence strength, specificity, recency, risk, and
+redundancy, with cited job evidence and a rationale. Compute:
+
+`relevance * evidence_strength * specificity * recency - risk - redundancy`
+
+A profile is eligible only when mapped evidence covers at least one anchor, two
+distinct supporting facts, and cited job priorities without violating its
+seniority ceiling or prohibited claims. Sum non-negative claim scores. Select
+the highest score; break ties by total evidence strength, total relevance,
+lower risk, then stable profile ID.
+
+Headline, summary, fit arguments, highlights, matched analysis, letter claims,
+and selection rationale may use only facts in the selected profile's
+`allowed_positioning_fact_ids`. Generate headline and summary last. A translated
+headline must preserve the canonical profile meaning and seniority.
+
+When no profile is eligible, stop and propose a new evidence-backed profile.
+Explain why no approved profile fits and which facts support the proposal. Do
+not fall back to a generic résumé.
 
 ## Classification
 
@@ -16,7 +41,7 @@ Use `technical` or `balanced` focus for computing jobs, `transferable` or `balan
 Use this order because it is both faster and more reliable than comparing every fact equally with every requirement:
 
 1. Derive job priorities only from cited job fields, emphasizing responsibilities and requirements over generic company language.
-2. Run a baseline-coverage pass before semantic matching:
+2. After approved-profile selection, run a baseline-coverage pass before semantic matching:
    - Preserve the candidate identity, contact, and headline fields as required by the bundle contract.
    - If language facts exist, keep a concise language line by default. Always keep them when the posting names a language, involves customers/public/stakeholders, is international, or makes communication a priority. Do not infer proficiency; if levels are absent, list only the supported language names.
    - If education facts exist, keep the most recent or highest completed education entry by default. Keep additional education when it is required, directly relevant, recent, or needed to explain the candidate's profile. Do not drop all education merely because the role is non-computing.
@@ -27,6 +52,13 @@ Use this order because it is both faster and more reliable than comparing every 
 5. Build `fit_arguments` that cite both sides. A coincidental keyword is not enough; describe the supported relationship.
 6. Cite all candidate claims with selected evidence. Do not turn an adjacent fact into direct experience, and do not use a job requirement to upgrade an unsupported language level, degree, certification, or seniority claim.
 7. Draft for a one-page résumé. Spend the page budget in this order: required identity/context, relevant experience, relevant education, relevant languages/certifications, then other relevant facts. Compress repeated wording and move secondary details into compact lines before removing baseline context; only then deprioritize the least relevant optional fact. Never use irrelevant facts as filler.
+
+Use typed records as the only source of employer and education display fields.
+An employee/intern entry uses `legal_employer`; contractor/freelancer work uses
+`contracting_party`. A `client` may appear only with an explicit client-project
+label. Copy `institution`, `official_degree`, and `field` from education
+records. Omit ambiguous records and surface their candidate-evidence warnings
+as gaps.
 
 ### Fast preservation heuristics
 

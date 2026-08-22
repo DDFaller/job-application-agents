@@ -1,6 +1,6 @@
 ---
 name: prepare-job-application
-description: Orchestrate the complete single-job application workflow by extracting a public opening, combining it with master-curriculum evidence, tailoring a job-family-appropriate application bundle, independently reviewing it, and tracking it through the connected Notion MCP. Use for computing, non-computing, mixed, or minor-job applications from a URL or pasted description.
+description: Orchestrate one job application by extracting a public opening, combining neutral master-curriculum evidence with an approved role-profile catalog, tailoring and independently reviewing an editable LaTeX bundle, and tracking it in Notion. Use for computing, non-computing, mixed, or minor-job applications. Pause with an explained profile proposal when no approved profile fits.
 ---
 
 # Prepare Job Application
@@ -8,8 +8,8 @@ description: Orchestrate the complete single-job application workflow by extract
 Coordinate `$extract-job-opening`, `$tailor-application-bundle`, and `$notion-track-application` in that order.
 
 When invoked by `$manage-job-applications`, accept its timing-ledger path and
-run ID and append all stage events to that ledger. At minimum record the two
-parallel extraction branches, candidate/job validation and repairs, tailoring
+run ID and append all stage events to that ledger. At minimum record job and
+candidate extraction, profile resolution, all validation and repair, tailoring
 and review attempts, staged rendering/promotion, and Notion synchronization. Pass
 the same context to nested skills. A blocked gate must close its active event,
 open a `kind: wait` event, and finalize the run as `needs_input` until resumed.
@@ -27,14 +27,14 @@ or backfill event timestamps from worker prose.
 ## End-to-end workflow
 
 1. Read `references/workflow.md` and resolve the application root.
-2. Start the job-opening extraction agent, a distinct candidate-evidence mapping agent on a cache miss, and local XeLaTeX preflight concurrently. Submit all independent work before waiting. In managed mode, use the resolved canonical Markdown directory and manifest supplied by `$manage-job-applications`. Reuse a validated hash-keyed evidence cache entry; only run the mapping agent while holding a cache-build lock on a miss. Do not treat a state-root readiness report as required input. If multi-agent tools or capacity are unavailable, report degraded serial mode immediately and serialize only the unavailable branches.
-3. Join and validate the job artifact and the derived candidate-evidence index. Preserve the canonical Markdown directory and source hashes for the next stage. Stop if either branch is partial/blocked or required identity/contact evidence is missing.
+2. Start job extraction, candidate-evidence mapping/cache lookup, approved-profile resolution, and local XeLaTeX preflight concurrently. Submit all independent work before waiting. In managed mode, use the exact source and profile manifests supplied by `$manage-job-applications`. Reuse a validated evidence cache entry; only run the mapping agent while holding the cache-build lock on a miss. If multi-agent capacity is unavailable, report degraded serial mode.
+3. Join and validate the job, schema-3 candidate evidence, and approved role-profile catalog. Require typed work/education records and an exact match between candidate sources and the catalog's source binding. Stop if any input is partial, stale, blocked, or missing identity/contact evidence.
    If candidate mapping is unavailable, close the active event, record a
    `kind: wait` event, and return `needs_input`; do not pass provisional output
    to tailoring.
-4. Run the complete `$tailor-application-bundle` workflow in reuse mode with the derived per-run evidence index and canonical Markdown context. Require its job-family classification, job-priority/evidence partition, compatible document focus, structural validation, and independent semantic review. Do not replace it with an abbreviated writer-only call.
-5. Start temporary XeLaTeX rendering concurrently with the distinct independent semantic-review agent. Promote the staged artifacts only after the exact bundle receives a validated `accept` verdict. No visual inspection is required.
-6. Upsert the Notion record in `TO_APPLY` only after local success.
+4. Run the complete `$tailor-application-bundle` workflow in reuse mode with candidate evidence and the approved catalog. Require profile ranking, claim scores, evidence partition, structural validation, and independent review. If it returns a validated profile proposal, record `needs_input`, return its reason and path, and stop before rendering or Notion.
+5. Start temporary XeLaTeX rendering concurrently with the distinct independent semantic-review agent. Use `--profile auto`: clearly French locations receive the preserved A4 sidebar template and all others receive the compact international template. The France profile requires the approved canonical candidate photo. Promote the staged artifacts only after the exact bundle receives a validated `accept` verdict. No visual inspection is required.
+6. Upsert the Notion record in `TO_APPLY` only after local success. The Notion synchronization must include the current resume and motivation-letter PDFs and the editable LaTeX sources (`resume.tex`, `letter.tex`, and `preamble.tex`); when individual `.tex` uploads are unsupported, attach a versioned ZIP containing those exact raw files.
 7. Return the local version directory and Notion page URL. Do not submit the application.
 
 If Notion fails, keep the local bundle and retry synchronization from its manifest; do not regenerate documents. If extraction fails, request pasted content rather than bypassing authentication.
