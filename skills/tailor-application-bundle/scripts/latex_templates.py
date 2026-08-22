@@ -305,8 +305,23 @@ def render_resume(
     else:
         sidebar_sections, main_sections = [], sections
 
+    def format_contact_item(value: str) -> str:
+        escaped = latex_escape(value)
+        lower = value.lower()
+        if "github.com" in lower:
+            return r"\faGithub\ \href{https://" + escaped + "}{" + escaped + "}"
+        elif "linkedin.com" in lower:
+            return r"\faLinkedin\ \href{https://" + escaped + "}{" + escaped + "}"
+        elif "@" in lower:
+            return r"\faEnvelope\ \href{mailto:" + escaped + "}{" + escaped + "}"
+        elif lower.startswith("+") or any(c.isdigit() for c in lower):
+            return r"\faPhone\ " + escaped
+        elif "http" in lower or "www" in lower:
+            return r"\faGlobe\ \href{https://" + escaped + "}{" + escaped + "}"
+        return escaped
+
     candidate = bundle["candidate"]
-    contact = r" \textbar\ ".join(latex_escape(value) for value in candidate.get("contact", []))
+    contact = r" \textbar\ ".join(format_contact_item(value) for value in candidate.get("contact", []))
     main = safe_relative(root, manifest["main"]).read_text(encoding="utf-8")
     values: dict[str, object] = {
         "NAME": latex_escape(candidate.get("name", "")),

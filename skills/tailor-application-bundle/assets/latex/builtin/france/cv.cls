@@ -5,6 +5,14 @@
 \LoadClass[10pt,a4paper]{article}
 
 \RequirePackage{fontspec}
+\setmainfont[Path=fonts/inter/,
+    Extension=.ttf,
+    UprightFont=*-Light,
+    BoldFont=*-SemiBold]{Inter}
+\setsansfont[Path=fonts/inter/,
+    Extension=.ttf,
+    UprightFont=*-Light,
+    BoldFont=*-SemiBold]{Inter}
 \RequirePackage[compact]{titlesec}
 \RequirePackage[colorlinks=true,allcolors=black]{hyperref}
 \RequirePackage{fontawesome5}
@@ -30,7 +38,7 @@
 
 \newcommand{\datesubsection}[2]{\subsection[#1]{#1\hfill #2}}
 \newcommand{\contact}[1]{%
-  \if\relax\detokenize{#1}\relax\else\faAddressCard\hspace{0.25cm}\parbox[t]{0.82\linewidth}{\small #1}\par\vspace{3pt}\fi
+  \if\relax\detokenize{#1}\relax\else\parbox[t]{0.82\linewidth}{\small #1}\par\vspace{3pt}\fi
 }
 \newcommand{\location}[1]{%
   \if\relax\detokenize{#1}\relax\else\faMapMarker*\hspace{0.25cm}{\small #1}\par\vspace{3pt}\fi

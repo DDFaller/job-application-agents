@@ -69,6 +69,8 @@ def write_template(parent: Path, template_id: str = "compact-test") -> Path:
     )
     (root / "local-style.sty").write_text(
         "\\ProvidesPackage{local-style}\n"
+        "\\RequirePackage{fontawesome5}\n"
+        "\\RequirePackage{hyperref}\n"
         "\\renewcommand{\\section}[1]{\\par\\textbf{#1}\\par}\n"
         "\\setlength{\\parskip}{0pt}\n",
         encoding="utf-8",
