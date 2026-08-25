@@ -1,0 +1,43 @@
+{
+  "id": "190ABCD",
+  "intitule": "Agent administratif / Agente administrative",
+  "description": "Gestion des dossiers, accueil du public et mise à jour de tableaux de suivi.",
+  "dateCreation": "2026-08-24T10:30:00.000Z",
+  "dateActualisation": "2026-08-25T08:15:00.000Z",
+  "lieuTravail": {
+    "libelle": "75 - PARIS",
+    "codePostal": "75012"
+  },
+  "typeContrat": "CDD",
+  "typeContratLibelle": "Contrat à durée déterminée - 12 Mois",
+  "natureContrat": "Contrat travail",
+  "experienceLibelle": "Débutant accepté",
+  "entreprise": {
+    "nom": "Employeur exemple"
+  },
+  "salaire": {
+    "libelle": "Mensuel de 2100 Euros"
+  },
+  "competences": [
+    {
+      "libelle": "Classer des documents",
+      "exigence": "E"
+    }
+  ],
+  "qualitesProfessionnelles": [
+    {
+      "libelle": "Faire preuve de rigueur",
+      "description": "Organiser son travail"
+    }
+  ],
+  "formations": [],
+  "permis": [],
+  "origineOffre": {
+    "origine": "France Travail",
+    "urlOrigine": "https://candidat.francetravail.fr/offres/recherche/detail/190ABCD"
+  },
+  "contact": {
+    "courriel": "ne-doit-pas-etre-conserve@example.test",
+    "telephone": "0102030405"
+  }
+}

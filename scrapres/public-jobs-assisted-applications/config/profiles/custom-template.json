@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "id": "custom-template",
+  "display_name": "Modelo para personalização — edite antes de usar",
+  "profile_version": "public-v1",
+  "career_profile_current": "",
+  "top_count": 20,
+  "minimum_notion_score": 60,
+  "preliminary_threshold": 10,
+  "france_travail": {
+    "keywords": ["SUBSTITUA POR UMA BUSCA FRANCE TRAVAIL"],
+    "departments": []
+  },
+  "excluded_terms": ["stage", "stagiaire", "apprentissage", "internship"],
+  "blocked_title_terms": [],
+  "preliminary_title_rules": [
+    { "source": "title", "terms": ["SUBSTITUA PELO TÍTULO-ALVO"], "points": 30 }
+  ],
+  "preliminary_bonus_rules": [
+    { "source": "combined", "terms": ["SUBSTITUA POR UMA MISSÃO RELEVANTE"], "points": 5, "reason": "missão relevante" }
+  ],
+  "direct_match_rules": [
+    { "source": "title", "terms": ["SUBSTITUA PELO TÍTULO-ALVO"], "points": 15, "reason": "intitulé alinhado ao objetivo", "evidence_key": "target_title", "exclusive_group": "title" },
+    { "source": "all", "terms": ["SUBSTITUA POR UMA COMPETÊNCIA"], "points": 10, "reason": "competência relevante", "evidence_key": "core_skill" }
+  ],
+  "gap_rules": [],
+  "sector_signals": {
+    "technology_terms": [],
+    "technology_career_bonus": 0
+  },
+  "career_bonus_terms": ["formation", "évolution"],
+  "practical_locations": {
+    "excellent": [],
+    "strong": [],
+    "acceptable": []
+  },
+  "evidence": {
+    "target_title": [],
+    "core_skill": []
+  }
+}

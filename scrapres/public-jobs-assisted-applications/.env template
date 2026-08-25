@@ -1,0 +1,18 @@
+# Opcional: necessário somente para a extração estruturada com Gemini.
+GEMINI_API_KEY=""
+GEMINI_MODEL=gemini-3.7-flash
+GEMINI_FALLBACK_MODELS=
+GEMINI_REQUEST_DELAY_MS=5000
+
+# Opcional: necessário para consultar as vagas da API oficial France Travail.
+# Crie/gerencie a aplicação em https://francetravail.io e nunca versione valores reais.
+FRANCE_TRAVAIL_CLIENT_ID=""
+FRANCE_TRAVAIL_CLIENT_SECRET=""
+
+# Opcional: escolha um perfil versionado sem criar config/profile.local.json.
+JOB_SEARCH_PROFILE=
+
+# Opcional: título da base usada pelo handoff do Notion.
+NOTION_DATABASE_TITLE=Job Applications
+
+# https://francetravail.io/

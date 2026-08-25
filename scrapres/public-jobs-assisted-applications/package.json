@@ -1,0 +1,37 @@
+{
+  "name": "public-jobs-assisted-applications",
+  "version": "1.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Pipeline configurável de vagas francesas com candidatura assistida e revisão humana.",
+  "scripts": {
+    "profile:list": "node profile-cli.mjs list",
+    "profile:init": "node profile-cli.mjs init",
+    "profile:check": "node profile-cli.mjs check",
+    "discover:csp": "node discover-csp.mjs",
+    "discover:territorial": "node discover-emploi-territorial.mjs",
+    "discover:france-travail": "node discover-france-travail.mjs",
+    "extract": "node extract-job.mjs",
+    "rank": "node run.mjs --rank-only",
+    "notion:preview": "node notion-outbox.mjs preview",
+    "notion:approve": "node notion-outbox.mjs approve",
+    "notion:pending": "node notion-outbox.mjs pending",
+    "applications": "node application-cli.mjs",
+    "applications:import": "node application-cli.mjs import-ranked",
+    "applications:add": "node application-cli.mjs add",
+    "applications:link": "node application-cli.mjs link",
+    "applications:handoff": "node application-cli.mjs handoff",
+    "applications:attach": "node application-cli.mjs attach",
+    "applications:open": "node application-cli.mjs open",
+    "applications:mark-applied": "node application-cli.mjs mark-applied",
+    "sync": "node run.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@google/genai": "^2.0.0",
+    "cheerio": "^1.1.0"
+  }
+}

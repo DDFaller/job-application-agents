@@ -1,0 +1,4 @@
+interface:
+  display_name: "Manage Job Applications"
+  short_description: "Parallel job applications with live status"
+  default_prompt: "Use $manage-job-applications to coordinate my job applications in parallel and keep me updated throughout each run."

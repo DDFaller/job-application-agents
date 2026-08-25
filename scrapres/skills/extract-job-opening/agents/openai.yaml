@@ -1,0 +1,4 @@
+interface:
+  display_name: "Extract Job Opening"
+  short_description: "Delegate evidence-backed job extraction to Luna"
+  default_prompt: "Use $extract-job-opening to delegate and validate this job posting extraction."

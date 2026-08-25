@@ -1,0 +1,4 @@
+interface:
+  display_name: "Maintain Master Curriculum"
+  short_description: "Keep application evidence complete and ready"
+  default_prompt: "Use $maintain-master-curriculum to update and audit my canonical application sources."
