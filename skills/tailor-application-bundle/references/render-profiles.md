@@ -3,10 +3,29 @@
 Use `--profile auto|international|france`; `auto` is the default.
 
 - `international` uses the preserved compact downloaded international design on US Letter paper. It is one column, has no photo, and renders sections in bundle order.
-- `france` uses the preserved downloaded `main.tex`/`cv.cls` A4 design with colored left and right columns and a circular candidate photo. Sections containing only `one_line` entries render in the left sidebar; profile, experience, projects, education, and other detailed sections render in the main column.
+- `france` uses the preserved downloaded `main.tex`/`cv.cls` A4 design with colored left and right columns and a circular candidate photo. The left sidebar is reserved for identity, technical skills, soft skills, and languages as compact `one_line` sections; profile, experience, all education records, optional projects, and other detailed sections render in the main column.
 - `auto` selects `france` only when the normalized job location clearly identifies France or a recognized French city; otherwise it selects `international`. Pass an explicit profile when geography is ambiguous.
 
 Every profile has a hard one-page maximum enforced with `pdfinfo`. Generated PDFs must contain extractable text and pass their profile-specific reading-order contract: sequential bundle order internationally, and left-column identity/sidebar content followed by the right-column headline/profile/main content for France. The France check uses raw PDF content order so visual row alignment cannot scramble the two semantic columns. Page-fill visual inspection is intentionally out of scope. Do not stretch prose, add irrelevant history, or invent facts to fill the page.
+
+### France visual hierarchy and spacing
+
+For the France profile, preserve this visual reference when constructing new
+CVs:
+
+- Bold the company/employer, institution, and project name.
+- Bold the experience position and education degree/field; keep location and
+  dates italic or regular so they remain secondary.
+- Keep contact methods on separate readable lines, with small vertical gaps
+  between email, phone, and social-link groups.
+- Keep technical skills, supported soft skills, and languages in the left
+  sidebar as compact one-line category entries. Use controlled `2pt` spacing
+  between entries rather than blank source lines.
+- In the main column, use `\medskip` after major section headings and between
+  major experience entries; use `\smallskip` between education entries.
+- Use short bullet lists with approximately `1--2pt` between bullets and no
+  filler spacing. Place optional personal projects after education so they are
+  the first content removed when the one-page render is too tall.
 
 XeLaTeX is the only renderer. Each current version includes editable `resume.tex`, `letter.tex`, and `preamble.tex`, the selected template's supporting files, and a frozen template-source snapshot.
 

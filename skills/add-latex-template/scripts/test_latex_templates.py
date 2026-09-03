@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import io
 import json
-import shutil
 import sys
 import tempfile
 import unittest
@@ -22,6 +21,18 @@ sys.path.insert(0, str(TAILOR_SCRIPTS))
 import install_template  # noqa: E402
 import latex_templates  # noqa: E402
 import validate_template  # noqa: E402
+
+
+def render_service_ready() -> bool:
+    try:
+        client = validate_template.RenderServiceClient(
+            validate_template.FirestoreRenderJobRepository(validate_template.firebase_project_id()),
+            validate_template.ArtifactStore(validate_template.artifact_root()),
+        )
+        client.preflight()
+        return True
+    except Exception:
+        return False
 
 
 def write_template(parent: Path, template_id: str = "compact-test") -> Path:
@@ -95,8 +106,8 @@ def write_template(parent: Path, template_id: str = "compact-test") -> Path:
 
 class LatexTemplateTests(unittest.TestCase):
     def test_structure_and_synthetic_compile(self) -> None:
-        if not all(shutil.which(tool) for tool in ("xelatex", "kpsewhich", "pdfinfo", "pdftotext")):
-            self.skipTest("XeLaTeX validation toolchain is unavailable")
+        if not render_service_ready():
+            self.skipTest("render service is unavailable")
         with tempfile.TemporaryDirectory() as temporary:
             root = write_template(Path(temporary))
             status, report = validate_template.validate_template(root)

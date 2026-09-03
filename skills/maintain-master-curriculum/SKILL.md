@@ -10,13 +10,21 @@ Maintain a curated evidence library. Treat approved direct user statements and s
 Keep ingestion neutral. Store only factual evidence in canonical Markdown;
 derive professional positioning afterward as a separate approved artifact.
 
+For first-time setup or search-preference changes, `$onboard-job-search` owns
+the interview and delegates factual writes here. Search preferences remain a
+separate approved artifact and must not be mixed into neutral candidate facts.
+
 ## Resolve paths and contracts
 
-- Default the canonical source directory to `~/Documents/job-search/sources`.
-- Keep the canonical source folder at `~/Documents/job-search/sources`; its
+- Default the canonical source directory to `<data-root>/sources` (resolved from `--data-root`, `JAA_DATA_ROOT`, `./job-search/sources`, or `~/Documents/job-search/sources`).
+- The canonical profile state root is `<data-root>/master-curriculum`; its
+  profile pointer is `<data-root>/master-curriculum/profiles/current.json`.
+  Never publish profiles with the data root itself as `--state-root`.
+- Keep the canonical source folder at `<data-root>/sources`; its
   `current.json` is the only hot-path retrieval pointer. Historical versions,
   reviews, and audits remain optional archival data under
-  `~/Documents/job-search/master-curriculum`.
+  `<data-root>/master-curriculum`.
+
 - Read `references/source-layout.md` before proposing or auditing sources.
 - Read `references/role-profiles.md` before discovering, requesting, reviewing,
   or publishing professional profiles.
@@ -44,10 +52,11 @@ python3 scripts/commit_master_update.py \
   --review <additions-review.json> \
   --source-dir <canonical-source-directory> \
   --state-root <state-root> \
-  --approval APPROVED
+  --approval APPROVED \
+  --sync-firestore
 ```
 
-The script reruns both validators, rejects non-accepted or stale reviews, creates an immutable `vNNN`, preserves the review and its input snapshots, moves any prior canonical directory to a recoverable archive, installs the approved version, and updates `current.json`. Never edit an immutable version. If approval is withheld or the commit fails, leave canonical sources unchanged.
+The script reruns both validators, rejects non-accepted or stale reviews, creates an immutable `vNNN`, preserves the review and its input snapshots, moves any prior canonical directory to a recoverable archive, installs the approved version, updates `current.json`, and synchronizes the canonical curriculum to Firestore under `users/{userId}/curriculum/current` when Firebase is connected. Never edit an immutable version. If approval is withheld or the commit fails, leave canonical sources unchanged.
 
 ## Discover and publish role profiles
 
@@ -70,9 +79,9 @@ The script reruns both validators, rejects non-accepted or stale reviews, create
    and explicit risks. Run `scripts/validate_profile_review.py`.
 6. Show the user the exact current-to-staged profile diff, review findings, and
    unresolved gaps. Publish only after explicit approval with
-   `scripts/commit_profile_update.py --approval APPROVED`. The command writes
-   immutable `pNNN` history under `<state-root>/profiles/` and updates
-   `<state-root>/profiles/current.json`.
+   `scripts/commit_profile_update.py --approval APPROVED --sync-firestore`. The command writes
+   immutable `pNNN` history under `<state-root>/profiles/`, updates
+   `<state-root>/profiles/current.json`, and syncs to Firestore under `users/{userId}/profiles/current`.
 7. Treat every source-manifest change as invalidating the current catalog.
    Facts may still be committed independently, but application preparation
    must pause until a compatible catalog is approved.
@@ -106,7 +115,9 @@ compatibility, but it is never a second source of truth and is not required in
 the master-curriculum state directory.
 
 The separate positioning contract is `<state-root>/profiles/current.json`.
-Consumers run `scripts/resolve_profiles.py --state-root <state-root>` and pass
+Consumers that need profiles for an application use the read-only
+`$resolve-approved-role-profile` skill. Maintenance diagnostics may run
+`scripts/resolve_profiles.py --state-root <data-root>/master-curriculum`; pass
 the resolved immutable catalog plus hash unchanged. A source pointer may exist
 without profiles, but application tailoring requires both compatible contracts.
 

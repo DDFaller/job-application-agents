@@ -1,0 +1,63 @@
+services:
+  firebase-emulator:
+    build:
+      context: ..
+      dockerfile: deploy/docker/firebase-emulator/Dockerfile
+    environment:
+      GCLOUD_PROJECT: demo-job-application-agents
+    ports:
+      - "127.0.0.1:${JAA_FIRESTORE_PORT:-8080}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+      - /runtime:size=64m,mode=0755
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080').then(()=>process.exit(0)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  latex-worker:
+    build:
+      context: ..
+      dockerfile: deploy/docker/latex-worker/Dockerfile
+    environment:
+      JAA_FIREBASE_PROJECT_ID: demo-job-application-agents
+      FIRESTORE_EMULATOR_HOST: firebase-emulator:8080
+      JAA_ARTIFACT_ROOT: /artifacts
+      JAA_WORKER_ID: ${JAA_WORKER_ID:-local-emulator-worker}
+    user: "${JAA_HOST_UID:-1000}:${JAA_HOST_GID:-1000}"
+    volumes:
+      - ${JAA_ARTIFACT_ROOT:?Set JAA_ARTIFACT_ROOT to an absolute host path}:/artifacts:z
+    depends_on:
+      firebase-emulator:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "job_application_agents.render_service.worker", "--healthcheck"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+
+  notion-worker:
+    build:
+      context: ..
+      dockerfile: deploy/docker/notion-worker/Dockerfile
+
+    environment:
+      JAA_FIREBASE_PROJECT_ID: demo-job-application-agents
+      FIRESTORE_EMULATOR_HOST: firebase-emulator:8080
+      NOTION_TOKEN: ${NOTION_TOKEN:?Set NOTION_TOKEN}
+      NOTION_DATABASE_ID: ${NOTION_DATABASE_ID:-3c7ac433-f81d-80bd-959d-ecfeba5f8ffe}
+    depends_on:
+      firebase-emulator:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]

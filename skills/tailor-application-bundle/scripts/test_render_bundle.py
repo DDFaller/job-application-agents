@@ -89,11 +89,46 @@ class RenderBundleTests(unittest.TestCase):
             r"A\&B\_\textasciitilde{}\textasciicircum{}\textbackslash{}",
         )
 
+    def test_contact_urls_are_not_double_prefixed(self) -> None:
+        skill = Path(__file__).resolve().parent.parent
+        bundle = {
+            "candidate": {
+                "name": "Ada Example", "headline": "Backend Engineer", "location": "Paris",
+                "contact": ["ada@example.test", "https://github.com/ada", "https://example.test"],
+                "summary": {"text": "Builds observable data pipelines."},
+            },
+            "resume_sections": [],
+        }
+        tex = render_bundle.latex_cv_document(bundle, "france", None, {}, skill)
+        self.assertIn(r"\href{https://github.com/ada}{\faGithub}", tex)
+        self.assertIn(r"\href{https://example.test}{\faGlobe}", tex)
+        self.assertNotIn("https://https://", tex)
+
     def test_custom_preflight_skips_builtin_templates(self) -> None:
         with mock.patch.object(render_bundle.shutil, "which", side_effect=lambda name: name), \
                 mock.patch.object(render_bundle, "builtin_template") as builtin:
             render_bundle.preflight_rendering(Path("skill"), builtin_latex=False)
         builtin.assert_not_called()
+
+    def test_local_render_mode_uses_bounded_compiler_without_firestore(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source"
+            output = Path(temporary) / "output"
+            source.mkdir()
+            (source / "resume.tex").write_text("resume", encoding="utf-8")
+            (source / "letter.tex").write_text("letter", encoding="utf-8")
+            expected = {"status": "SUCCEEDED", "documents": {}}
+            with mock.patch.object(
+                render_bundle, "load_render_config",
+                return_value=SimpleNamespace(mode="local"),
+            ), mock.patch.object(
+                render_bundle, "compile_request", return_value=expected,
+            ) as compiler:
+                result = render_bundle.compile_with_render_service(source, output)
+            self.assertIs(result, expected)
+            compiler.assert_called_once()
+            self.assertEqual(compiler.call_args.args[1], source)
+            self.assertEqual(compiler.call_args.args[2], output)
 
 
     def test_custom_template_snapshot_copies_only_runtime_files_to_root(self) -> None:
@@ -157,7 +192,7 @@ class RenderBundleTests(unittest.TestCase):
         }
         self.assertEqual(
             render_bundle.resume_order_anchors(bundle, "france"),
-            ["ada", "skills", "languages", "engineer", "profile", "experience", "company"],
+            ["ada", "engineer", "profile", "skills", "languages", "experience", "company"],
         )
 
     def test_france_stage_requires_approved_photo(self) -> None:
@@ -268,17 +303,21 @@ class RenderBundleTests(unittest.TestCase):
                 "manifest": str((version / "manifest.json").resolve()),
             })
 
-            def resume(_tex, out, _pages):
+            def compile_service(_source, out, **_options):
                 (out / "resume.pdf").write_bytes(b"new resume")
-                return {"pages": 1, "text_chars": 10}
-
-            def letter(_tex, out):
                 (out / "motivation-letter.pdf").write_bytes(b"new letter")
-                return {"pages": 1, "text_chars": 10}
+                return {"documents": {
+                    "resume.pdf": {
+                        "pages": 1, "text_chars": 10, "normalized_text_sha256": "new",
+                    },
+                    "motivation-letter.pdf": {
+                        "pages": 1, "text_chars": 10, "normalized_text_sha256": "new",
+                    },
+                }}
 
-            with mock.patch.object(render_bundle, "render_resume_latex", side_effect=resume), \
-                 mock.patch.object(render_bundle, "to_letter_pdf_latex", side_effect=letter), \
-                 mock.patch.object(render_bundle, "document_text_hashes", return_value={"resume.pdf": "new", "motivation-letter.pdf": "new"}):
+            with mock.patch.object(
+                render_bundle, "compile_with_render_service", side_effect=compile_service
+            ):
                 render_bundle.rebuild_current_version(version, Path("skill"))
 
             manifest = json.loads((version / "manifest.json").read_text(encoding="utf-8"))

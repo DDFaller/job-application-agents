@@ -1,0 +1,15 @@
+{
+  // xelatex: supported local/worker-based LaTeX renderer
+  // cvrender: reserved external renderer adapter; unavailable until implemented
+  "engine": "xelatex",
+
+  // local: compile on this machine; cloud: use the Firestore worker;
+  // auto: use local when available and cloud otherwise.
+  "mode": "local",
+
+  // auto, international, france, or an installed template slug
+  "profile": "auto",
+
+  // builtin or an installed custom template slug
+  "template": "builtin"
+}

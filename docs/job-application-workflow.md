@@ -4,6 +4,12 @@ This document describes what happens after a public job link is supplied to
 `$prepare-job-application`. It covers one opening only. The workflow prepares
 and tracks an application; it never submits the application.
 
+The surrounding lifecycle is composed from `$onboard-job-search`,
+`$rank-job-shortlist`, `$track-application-outcome`, `$sync-application-email`,
+`$prepare-interview`, `$generate-application-report`, and the optional
+`$sync-job-pipeline-view`. These workflows reuse the same local/Firestore
+application records and do not create a second tracker.
+
 Each managed run also writes a local timing ledger under
 `~/Documents/job-search/applications/.workflow-runs/`. The ledger records
 timezone-aware start/end timestamps, elapsed milliseconds, retries, blockers,
@@ -35,7 +41,7 @@ days old to `REAPPLY`; an explicit preview, audit, or dry run remains read-only.
 
 ```mermaid
 flowchart TD
-    A[Public job URL or pasted posting] --> B[Resolve application root and XeLaTeX preflight]
+    A[Public job URL or pasted posting] --> B[Resolve application root and render-service preflight]
     B --> C1[Luna: extract job opening]
     B --> C2{Evidence cache hit?}
     C2 -->|no| C3[Luna: map canonical Markdown evidence once]
@@ -66,9 +72,10 @@ flowchart TD
     Q --> P
 ```
 
-Job extraction, evidence-cache lookup/build, and XeLaTeX preflight run
-in parallel. After structural bundle validation, independent review and
-temporary rendering also overlap. Managed runs reuse evidence only when its
+Job extraction, evidence-cache lookup/build, and render-service preflight run
+in parallel. After structural bundle validation, constrained copy humanization,
+independent review, and temporary rendering use separate reserved capacity.
+Managed runs reuse evidence only when its
 complete canonical source fingerprint and receipt validate. Generated evidence
 is never written into the canonical source folder.
 
@@ -86,15 +93,16 @@ is never written into the canonical source folder.
 | 5 | `prepare-job-application` gate | Validated job, candidate evidence, and approved profiles | Checks readiness, typed records, and exact source/profile compatibility. | Tailoring may begin, or the run stops before drafting. |
 | 6 | Tailoring reuse handoff | `job.json`, `candidate-evidence.json`, `role-profiles.json` | Passes all three immutable inputs unchanged to Terra. | Exact input paths and hashes are preserved. |
 | 7 | Terra bundle-writing agent | Validated job, candidate evidence, approved profiles, templates | Scores claims, ranks every profile, selects the strongest eligible profile, partitions evidence, and drafts within its positioning boundary. | Schema-5 `bundle.json`, or validated `profile-proposal.json` plus `needs_input`. |
-| 8 | `validate_bundle.py` | `bundle.json` | Performs deterministic structural checks for schema, hashes, source references, evidence partition completeness, and citation bookkeeping. | Exit `0`: structurally ready for semantic review. |
-| 9 | Terra repair, at most once | Exact bundle validation errors | Corrects structural issues in the original writing context. | A revalidated bundle or a stopped workflow. |
-| 10 | Independent Luna review agent | Validated job, candidate evidence, bundle, review template | Judges job-family alignment, priority grounding, candidate relevance, focus compatibility, evidence-backed claims, and non-computing safeguards. | `tailoring-review.json` with `accept` or `revise`. |
-| 11 | `validate_tailoring_review.py` | `tailoring-review.json` | Checks review schema, referenced artifact paths/hashes, and verdict consistency. | Exit `0` plus reviewer verdict `accept` is required. |
-| 12 | Terra revision and fresh review, when needed | Review findings and current bundle | Applies one evidence-preserving revision, then repeats bundle validation and commissions a fresh review against the new bundle hash. | An independently accepted bundle or a stopped workflow. |
-| 13 | `render_bundle.py --stage` | Structurally valid `bundle.json`, application root, rendering profile | Runs XeLaTeX concurrently with semantic review and creates editable `.tex` sources, PDFs, and deterministic page/text results without publishing a version. | Non-current staging directory. |
-| 14 | `render_bundle.py --promote` | Staging directory and accepted review | Binds the review to the exact staged bundle and atomically creates schema-3 `vNNN` plus `current.json`. | Review-backed current version with editable LaTeX. |
-| 15 | `$notion-track-application` / Notion MCP | Local manifest and PDFs | Fetches the workspace, finds the exact database, deduplicates by canonical URL or source ID/company/role, uploads both PDFs concurrently after creating their targets, and upserts the record sequentially. | One synchronized `TO_APPLY` record with current document metadata. |
-| 16 | Parent completion | Local version and Notion result | Returns the local path, generated artifacts, evidence gaps, Notion status, and page URL. | User can review the application and decide whether to submit it manually. |
+| 8 | `validate_bundle.py` | `bundle.json` | Performs deterministic structural checks for schema, hashes, source references, evidence partition completeness, and citation bookkeeping. | Exit `0`: structurally ready for copy humanization. |
+| 9 | Humanizer copy agent | Validated bundle and only the CV summary plus motivation-letter paragraphs | Improves naturalness without changing claims, citations, structured fields, selected profile, or source evidence. | Constrained rewrite receipt and staged bundle. |
+| 10 | Terra repair, at most once | Exact bundle validation errors | Corrects structural issues in the original writing context. | A revalidated bundle or a stopped workflow. |
+| 11 | Independent Luna review agent | Validated job, candidate evidence, bundle, review template | Judges job-family alignment, priority grounding, candidate relevance, focus compatibility, evidence-backed claims, and non-computing safeguards. | `tailoring-review.json` with `accept` or `revise`. |
+| 12 | `validate_tailoring_review.py` | `tailoring-review.json` | Checks review schema, referenced artifact paths/hashes, and verdict consistency. | Exit `0` plus reviewer verdict `accept` is required. |
+| 13 | Terra revision and fresh review, when needed | Review findings and current bundle | Applies one evidence-preserving revision, then repeats bundle validation, humanization, and fresh review against the new bundle hash. | An independently accepted bundle or a stopped workflow. |
+| 14 | `render_bundle.py --stage` | Structurally valid `bundle.json`, application root, rendering profile | Freezes TeX sources and assets, enqueues the compile-only XeLaTeX worker concurrently with semantic review, then verifies returned hashes and reading order without publishing a version. | Non-current staging directory. |
+| 15 | `render_bundle.py --promote` | Staging directory and accepted review | Binds the review to the exact staged bundle and atomically creates schema-3 `vNNN` plus `current.json`. | Review-backed current version with editable LaTeX. |
+| 16 | `$notion-track-application` / Notion MCP | Local manifest and PDFs | Fetches the workspace, finds the exact database, deduplicates by canonical URL or source ID/company/role, uploads both PDFs concurrently after creating their targets, and upserts the record sequentially. | One synchronized `TO_APPLY` record with current document metadata. |
+| 17 | Parent completion | Local version and Notion result | Returns the local path, generated artifacts, evidence gaps, Notion status, and page URL. | User can review the application and decide whether to submit it manually. |
 
 ## Agent responsibilities
 
@@ -145,7 +153,7 @@ Scripts are integrity gates, not application strategists:
 - `validate_candidate_evidence.py` checks candidate evidence integrity and readiness.
 - `validate_bundle.py` checks bundle structure and citation bookkeeping.
 - `validate_tailoring_review.py` checks review-artifact integrity and consistency.
-- `render_bundle.py` stages deterministic XeLaTeX outputs, promotes only an exact independently accepted bundle, and rebuilds direct edits only in the current version.
+- `render_bundle.py` owns TeX generation, application-specific validation, staging, promotion, and rebuilding. The separate compile-only worker owns XeLaTeX, Poppler, and generic page/text checks.
 - `add-latex-template` adapts an untrusted local résumé project only after a
   synthetic one-page ATS probe and explicit preview approval. Custom templates
   are opt-in by slug and each rendered application freezes the exact project
@@ -183,3 +191,4 @@ A successful run returns:
   evidence.
 - Any evidence gaps or unsupported job requirements.
 - Notion synchronization status and the deduplicated page URL.
+- Firebase user layer synchronization under `users/{userId}/applications/...` when cloud sync is enabled.

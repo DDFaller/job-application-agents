@@ -1,0 +1,44 @@
+{
+  // Private working directory for candidate sources and generated applications.
+  // The runtime default is ~/Documents/job-search.
+  "data_root": "~/Documents/job-search",
+
+  // Optional override for generated application bundles.
+  // Defaults to <data_root>/applications.
+  "applications_root": "~/Documents/job-search/applications",
+
+  // Optional cloud project. Leave unset for the default local + Notion mode.
+  // "firestore_project_id": "your-gcp-project-id",
+
+  // Optional Notion database ID. Keep this value private; it is not a token.
+  "notion_database_id": "replace-with-your-notion-database-id",
+
+  "email": {
+    // gmail_api: browser-authorized Gmail API access (read-only)
+    // oauth2: compatibility alias for gmail_api
+    // app_password: existing Gmail IMAP access
+    "auth_mode": "gmail_api",
+
+    // Download a Desktop OAuth client JSON from Google Cloud Console.
+    "client_secrets_path": "~/.config/job-application-agents/gmail-client-secret.json",
+
+    // Created automatically after the first authorization.
+    "oauth_token_path": "~/.config/job-application-agents/gmail-token.json",
+
+    // INBOX or another Gmail label; ALL and UNSEEN are supported search modes.
+    "folder": "INBOX",
+    "search_criteria": "UNSEEN",
+    "mark_as_read": false
+  },
+
+  "storage": {
+    // notion_only: local artifacts plus Notion status/control (default)
+    // local_only: local application files only, without Notion
+    // firestore_notion: opt-in Firestore canonical storage synchronized with Notion
+    // firestore_only: opt-in Firestore records only
+    "application_backend": "notion_only",
+
+    // disabled is the default; cloud users may select bidirectional or firestore_to_notion
+    "notion_sync": "disabled"
+  }
+}

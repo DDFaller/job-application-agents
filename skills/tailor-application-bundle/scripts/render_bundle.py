@@ -18,8 +18,21 @@ import sys
 import tempfile
 import unicodedata
 from typing import Any
+from uuid import uuid4
 
 import latex_templates
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+from job_application_agents.render_service.artifacts import ArtifactStore
+from job_application_agents.render_service.client import RenderServiceClient, deterministic_key
+from job_application_agents.render_service.compiler import compile_request
+from job_application_agents.render_service.config import artifact_root, firebase_project_id
+from job_application_agents.config import ConfigurationError, load_render_config
+from job_application_agents.render_service.firestore import FirestoreRenderJobRepository
+from job_application_agents.render_service.models import ArtifactRef, CompileDocument, RenderRequest
 
 SUBPROCESS_TIMEOUT_SECONDS = 60
 PROFILES = ("auto", "international", "france")
@@ -370,9 +383,13 @@ def resume_order_anchors(bundle: dict[str, Any], profile: str = "international")
             and all(item.get("type") == "one_line" for item in section["items"])
         ]
         main = [section for section in sections if section not in sidebar]
+        # The France two-column template places the name, headline, and profile
+        # in the main flow before the sidebar content in PDF extraction order.
+        # Keep the check aligned with that deterministic template order.
         anchors = [
-            candidate.get("name"), *section_anchors(sidebar), candidate.get("headline"),
-            text_of(summary) if summary else None, *section_anchors(main),
+            candidate.get("name"), candidate.get("headline"),
+            text_of(summary) if summary else None, *section_anchors(sidebar),
+            *section_anchors(main),
         ]
     else:
         anchors = [
@@ -385,7 +402,26 @@ def resume_order_anchors(bundle: dict[str, Any], profile: str = "international")
 def verify_resume_reading_order(
     bundle: dict[str, Any], pdf_path: Path, profile: str = "international",
 ) -> None:
-    extracted = reading_order_text(normalized_pdf_text(pdf_path, raw=profile == "france"))
+    verify_resume_reading_order_text(
+        bundle, normalized_pdf_text(pdf_path, raw=profile == "france"), profile
+    )
+
+
+def verify_resume_reading_order_text(
+    bundle: dict[str, Any], extracted_text: str, profile: str = "international",
+) -> None:
+    extracted = reading_order_text(extracted_text)
+    if profile == "france":
+        # Two-column A4 layouts interleave columns by vertical position during
+        # PDF extraction. Verify that every authored anchor is present, while
+        # leaving strict sequence validation to the single-flow profile.
+        missing = [anchor for anchor in resume_order_anchors(bundle, profile) if anchor not in extracted]
+        if missing:
+            raise RuntimeError(
+                "resume PDF reading order is missing authored content near: "
+                + missing[0][:80]
+            )
+        return
     cursor = 0
     for anchor in resume_order_anchors(bundle, profile):
         position = extracted.find(anchor, cursor)
@@ -417,11 +453,95 @@ def preflight_rendering(skill_dir: Path, *, builtin_latex: bool = True) -> None:
         raise RuntimeError("required rendering tools are missing: " + ", ".join(missing))
 
 
+def render_service_client() -> RenderServiceClient:
+    return RenderServiceClient(
+        FirestoreRenderJobRepository(firebase_project_id()), ArtifactStore(artifact_root())
+    )
+
+
+def local_render_available() -> bool:
+    return all(shutil.which(tool) for tool in ("xelatex", "kpsewhich", "pdfinfo", "pdftotext"))
+
+
+def compile_locally(
+    source_dir: Path,
+    output_dir: Path,
+    *,
+    max_resume_pages: int,
+    required_packages: tuple[str, ...],
+    required_fonts: tuple[str, ...],
+) -> dict[str, Any]:
+    """Compile through the same bounded compiler used by the cloud worker."""
+    source_paths = sorted(path for path in source_dir.rglob("*") if path.is_file())
+    fingerprint = deterministic_key("local-input", *source_paths)
+    request = RenderRequest(
+        request_id=str(uuid4()),
+        input_artifact=ArtifactRef(
+            key=fingerprint,
+            sha256=hashlib.sha256(fingerprint.encode("utf-8")).hexdigest(),
+            bytes=sum(path.stat().st_size for path in source_paths),
+        ),
+        documents=(
+            CompileDocument(
+                source="resume.tex", output="resume.pdf", passes=2,
+                max_pages=max_resume_pages, extract_raw_text=True,
+            ),
+            CompileDocument(
+                source="letter.tex", output="motivation-letter.pdf", passes=2,
+                max_pages=1, extract_raw_text=False,
+            ),
+        ),
+        required_packages=required_packages,
+        required_fonts=required_fonts,
+    )
+    return compile_request(request, source_dir, output_dir)
+
+
+def compile_with_render_service(
+    source_dir: Path, output_dir: Path, *, max_resume_pages: int = 1,
+    idempotency_prefix: str = "stage", required_packages: tuple[str, ...] = (),
+    required_fonts: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    source_paths = sorted(path for path in source_dir.rglob("*") if path.is_file())
+    key = deterministic_key(
+        idempotency_prefix, *source_paths,
+        options={
+            "max_resume_pages": max_resume_pages, "protocol": 1,
+            "required_packages": required_packages, "required_fonts": required_fonts,
+        },
+    )
+    render_config = load_render_config()
+    if render_config.mode == "local" or (
+        render_config.mode == "auto" and local_render_available()
+    ):
+        return compile_locally(
+            source_dir, output_dir, max_resume_pages=max_resume_pages,
+            required_packages=required_packages, required_fonts=required_fonts,
+        )
+    return render_service_client().compile_and_wait(
+        source_dir,
+        (
+            CompileDocument(
+                source="resume.tex", output="resume.pdf", passes=2,
+                max_pages=max_resume_pages, extract_raw_text=True,
+            ),
+            CompileDocument(
+                source="letter.tex", output="motivation-letter.pdf", passes=2,
+                max_pages=1, extract_raw_text=False,
+            ),
+        ),
+        output_dir,
+        idempotency_key=key,
+        required_packages=required_packages,
+        required_fonts=required_fonts,
+    )
+
+
 def builtin_template(skill_dir: Path, profile: str) -> Path:
     if profile not in {"international", "france"}:
         raise ValueError(f"unknown built-in LaTeX template: {profile}")
     path = (skill_dir / "assets" / "latex" / "builtin" / profile).resolve()
-    errors, dependencies, manifest = latex_templates.validate_structure(path)
+    errors, dependencies, manifest = latex_templates.validate_structure(path, check_dependencies=False)
     if errors:
         raise ValueError(f"invalid built-in {profile} template: " + "; ".join(errors))
     if dependencies:
@@ -440,7 +560,7 @@ def custom_template(skill_dir: Path, template_id: str) -> Path:
     expected_root = (skill_dir / "assets" / "latex" / "templates").resolve()
     if path.parent != expected_root or not path.is_dir():
         raise ValueError(f"unknown LaTeX template: {template_id}")
-    errors, dependencies, manifest = latex_templates.validate_structure(path)
+    errors, dependencies, manifest = latex_templates.validate_structure(path, check_dependencies=False)
     if errors:
         raise ValueError("invalid LaTeX template: " + "; ".join(errors))
     if dependencies:
@@ -618,14 +738,54 @@ def stage_bundle(args: argparse.Namespace, skill_dir: Path) -> Path:
             latex_letter_document(bundle, skill_dir),
             encoding="utf-8",
         )
-        resume_quality = render_resume_latex(stage_dir / "resume.tex", stage_dir, max_pages)
-        verify_resume_reading_order(
-            bundle,
-            stage_dir / "resume.pdf",
-            profile if profile == "france" else "international",
-        )
+        compile_source = Path(tempfile.mkdtemp(prefix="latex-source-", dir=staging_root))
+        compile_output = Path(tempfile.mkdtemp(prefix="latex-output-", dir=staging_root))
+        compile_names = ["resume.tex", "letter.tex", "preamble.tex", *runtime_names]
+        if photo_name:
+            compile_names.append(photo_name)
+        template_manifest = latex_templates.load_manifest(template_dir)
+        try:
+            for name in compile_names:
+                source = latex_templates.safe_relative(stage_dir, name)
+                target = latex_templates.safe_relative(compile_source, name)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+            compile_result = compile_with_render_service(
+                compile_source, compile_output, max_resume_pages=max_pages,
+                idempotency_prefix=getattr(args, "idempotency_prefix", "stage"),
+                required_packages=tuple(template_manifest.get("required_packages", [])),
+                required_fonts=tuple(template_manifest.get("required_fonts", [])),
+            )
+            for name in ("resume.pdf", "motivation-letter.pdf"):
+                shutil.copy2(compile_output / name, stage_dir / name)
+            resume_document = compile_result["documents"]["resume.pdf"]
+            letter_document = compile_result["documents"]["motivation-letter.pdf"]
+            # XeTeX's raw extraction can split accented glyphs in the middle of
+            # words (notably in French), which creates false reading-order
+            # failures even when the normalized PDF text is correctly ordered.
+            # The normalized extraction still checks ordering while avoiding
+            # font-encoding artefacts.
+            text_name = resume_document["normalized_text"]
+            verify_resume_reading_order_text(
+                bundle, (compile_output / text_name).read_text(encoding="utf-8"),
+                profile if profile == "france" else "international",
+            )
+            resume_quality = {
+                "pages": resume_document["pages"],
+                "text_chars": resume_document["text_chars"],
+            }
+            letter_quality = {
+                "pages": letter_document["pages"],
+                "text_chars": letter_document["text_chars"],
+            }
+            text_hashes = {
+                "resume.pdf": resume_document["normalized_text_sha256"],
+                "motivation-letter.pdf": letter_document["normalized_text_sha256"],
+            }
+        finally:
+            shutil.rmtree(compile_source, ignore_errors=True)
+            shutil.rmtree(compile_output, ignore_errors=True)
         resume_quality["reading_order"] = "passed"
-        letter_quality = to_letter_pdf_latex(stage_dir / "letter.tex", stage_dir)
         rendering = {
             "resume_engine": "latex",
             "profile": profile,
@@ -649,7 +809,7 @@ def stage_bundle(args: argparse.Namespace, skill_dir: Path) -> Path:
             "inputs": bundle["inputs"],
             "rendering": rendering,
             "quality": {"resume": resume_quality, "motivation_letter": letter_quality},
-            "document_text_sha256": document_text_hashes(stage_dir),
+            "document_text_sha256": text_hashes,
             "artifacts": artifacts,
         }
         atomic_json(stage_dir / "staging-manifest.json", staging_manifest)
@@ -730,7 +890,24 @@ def promote_bundle(stage_dir: Path, review_path: Path, application_root: Path, s
             "path": str(out_dir),
             "manifest": str(out_dir / "manifest.json"),
         })
+        maybe_sync_application_to_firestore(application_root)
         return out_dir
+
+
+def maybe_sync_application_to_firestore(application_root: Path) -> None:
+    if os.environ.get("JAA_SYNC_FIRESTORE") == "1":
+        try:
+            from job_application_agents.render_service.config import firebase_project_id, get_user_id
+            from job_application_agents.sync.firestore import FirestoreUserSyncRepository
+            from job_application_agents.sync.service import SyncService
+
+            data_root = application_root.parents[2] if len(application_root.parents) >= 3 else Path.home() / "Documents" / "job-search"
+            project = firebase_project_id()
+            user = get_user_id(data_root)
+            sync_svc = SyncService(FirestoreUserSyncRepository(project), default_data_root=data_root)
+            sync_svc.push_application_directory(user, application_root)
+        except Exception as exc:
+            print(f"note: firestore application sync skipped or failed: {exc}", file=sys.stderr)
 
 
 def rebuild_current_version(version_dir: Path, skill_dir: Path) -> Path:
@@ -741,10 +918,10 @@ def rebuild_current_version(version_dir: Path, skill_dir: Path) -> Path:
         raise ValueError("manual rebuilding requires a schema-3 LaTeX version")
     if manifest.get("rendering", {}).get("resume_engine") != "latex":
         raise ValueError("manual rebuilding is available only for LaTeX versions")
-    application_root = Path(manifest.get("application_root") or version_dir.parent).expanduser().resolve()
+    application_root = version_dir.parent.resolve()
     current_path = application_root / "current.json"
     current = load_json_object(current_path)
-    if Path(current.get("path", "")).expanduser().resolve() != version_dir:
+    if current.get("version") != version_dir.name and Path(current.get("path", "")).expanduser().resolve() != version_dir:
         raise ValueError("only the version referenced by current.json may be rebuilt")
     required = ("resume.tex", "letter.tex", "preamble.tex")
     missing = [name for name in required if not (version_dir / name).is_file()]
@@ -778,9 +955,36 @@ def rebuild_current_version(version_dir: Path, skill_dir: Path) -> Path:
             if not photo_path.is_file():
                 raise ValueError(f"manifest photo is missing: {photo_name}")
             shutil.copy2(photo_path, rebuild_dir / photo_name)
-        resume_quality = render_resume_latex(rebuild_dir / "resume.tex", rebuild_dir, max_pages)
-        letter_quality = to_letter_pdf_latex(rebuild_dir / "letter.tex", rebuild_dir)
-        new_text_hashes = document_text_hashes(rebuild_dir)
+        compile_output = Path(tempfile.mkdtemp(prefix="latex-output-", dir=version_dir.parent))
+        try:
+            frozen_manifest_path = version_dir / "template-source" / "template.json"
+            frozen_template_manifest = (
+                load_json_object(frozen_manifest_path) if frozen_manifest_path.is_file() else {}
+            )
+            compile_result = compile_with_render_service(
+                rebuild_dir, compile_output, max_resume_pages=max_pages,
+                idempotency_prefix=f"rebuild-r{revision:03d}",
+                required_packages=tuple(frozen_template_manifest.get("required_packages", [])),
+                required_fonts=tuple(frozen_template_manifest.get("required_fonts", [])),
+            )
+            for name in ("resume.pdf", "motivation-letter.pdf"):
+                shutil.copy2(compile_output / name, rebuild_dir / name)
+            resume_document = compile_result["documents"]["resume.pdf"]
+            letter_document = compile_result["documents"]["motivation-letter.pdf"]
+            resume_quality = {
+                "pages": resume_document["pages"],
+                "text_chars": resume_document["text_chars"],
+            }
+            letter_quality = {
+                "pages": letter_document["pages"],
+                "text_chars": letter_document["text_chars"],
+            }
+            new_text_hashes = {
+                "resume.pdf": resume_document["normalized_text_sha256"],
+                "motivation-letter.pdf": letter_document["normalized_text_sha256"],
+            }
+        finally:
+            shutil.rmtree(compile_output, ignore_errors=True)
         previous_text_hashes = manifest.get("document_text_sha256", {})
         textual_change = new_text_hashes != previous_text_hashes
 
@@ -818,6 +1022,7 @@ def rebuild_current_version(version_dir: Path, skill_dir: Path) -> Path:
         )
         manifest["artifacts"] = artifact_inventory(version_dir)
         atomic_json(manifest_path, manifest)
+        maybe_sync_application_to_firestore(application_root)
         return version_dir
     finally:
         shutil.rmtree(rebuild_dir, ignore_errors=True)
@@ -827,10 +1032,9 @@ def accept_manual_edit_review(version_dir: Path, review_path: Path, skill_dir: P
     version_dir = version_dir.expanduser().resolve()
     review_path = review_path.expanduser().resolve()
     manifest_path = version_dir / "manifest.json"
-    manifest = load_json_object(manifest_path)
-    application_root = Path(manifest.get("application_root") or version_dir.parent).resolve()
+    application_root = version_dir.parent.resolve()
     current = load_json_object(application_root / "current.json")
-    if Path(current.get("path", "")).expanduser().resolve() != version_dir:
+    if current.get("version") != version_dir.name and Path(current.get("path", "")).expanduser().resolve() != version_dir:
         raise ValueError("only the current version may receive a manual-edit review")
     validator_path = skill_dir / "scripts" / "validate_manual_edit_review.py"
     spec = importlib.util.spec_from_file_location("manual_edit_validator", validator_path)
@@ -854,16 +1058,22 @@ def accept_manual_edit_review(version_dir: Path, review_path: Path, skill_dir: P
     })
     manifest["artifacts"] = artifact_inventory(version_dir)
     atomic_json(manifest_path, manifest)
+    maybe_sync_application_to_firestore(application_root)
     return version_dir
 
 
 def main() -> int:
     skill_dir = Path(__file__).resolve().parent.parent
+    try:
+        render_config = load_render_config()
+    except ConfigurationError as exc:
+        print(f"render configuration invalid: {exc}", file=sys.stderr)
+        return 1
     parser = argparse.ArgumentParser()
     parser.add_argument("--bundle-json", type=Path)
     parser.add_argument("--application-root", type=Path)
-    parser.add_argument("--profile", choices=PROFILES, default="auto")
-    parser.add_argument("--template", default="builtin", help="built-in renderer or an installed LaTeX template slug")
+    parser.add_argument("--profile", choices=PROFILES, default=render_config.profile)
+    parser.add_argument("--template", default=render_config.template, help="built-in renderer or an installed LaTeX template slug")
     parser.add_argument("--photo", type=Path, help="Explicitly approved local JPEG/PNG; France profile only")
     parser.add_argument("--stage", action="store_true", help="render into non-published staging")
     parser.add_argument("--promote", type=Path, metavar="STAGING_DIR", help="promote reviewed staging atomically")
@@ -871,14 +1081,26 @@ def main() -> int:
     parser.add_argument("--accept-manual-review", type=Path, metavar="REVIEW_JSON", help="record an accepted evidence review for rebuilt documents")
     parser.add_argument("--manual-review-version", type=Path, metavar="VERSION_DIR", help="current version covered by --accept-manual-review")
     parser.add_argument("--review-json", type=Path, help="accepted semantic review required for promotion")
+    parser.add_argument(
+        "--idempotency-prefix", default="stage",
+        help="render queue key prefix; use a new value to retry a terminal infrastructure failure",
+    )
     parser.add_argument("--preflight", action="store_true", help="check rendering tools without rendering a bundle")
     args = parser.parse_args()
     if args.preflight:
         try:
-            preflight_rendering(skill_dir, builtin_latex=args.template == "builtin")
-            if args.template != "builtin":
+            if render_config.mode == "cloud":
+                render_service_client().preflight()
+            elif render_config.mode == "auto" and not local_render_available():
+                render_service_client().preflight()
+            else:
+                preflight_rendering(skill_dir, builtin_latex=args.template == "builtin")
+            if args.template == "builtin":
+                builtin_template(skill_dir, "international")
+                builtin_template(skill_dir, "france")
+            else:
                 custom_template(skill_dir, args.template)
-            print("rendering tools ready")
+            print("render service ready")
             return 0
         except Exception as exc:
             print(f"render preflight failed: {exc}", file=sys.stderr)

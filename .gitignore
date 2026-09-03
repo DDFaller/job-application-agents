@@ -5,7 +5,32 @@ __pycache__/
 .env
 .env.*
 
-# Candidate data and generated applications must stay local.
+# =============================================================================
+# Candidate Private Data & Applications (Strictly Ignored)
+# =============================================================================
+job-search/
+data/
 sources/
 master-curriculum/
 applications/
+staging/
+staging_job/
+*.zip
+*.tar.gz
+
+# LaTeX build and compilation artifacts
+*.aux
+*.log
+*.out
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# Local Cloud SDKs & credentials
+google-cloud-sdk/
+*.json.key
+*credentials*.json
+# Gmail Desktop OAuth client and refresh token files
+gmail-client-secret.json
+gmail-token.json
+gmail-secrets.json

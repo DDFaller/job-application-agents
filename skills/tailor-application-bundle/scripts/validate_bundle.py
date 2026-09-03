@@ -14,6 +14,16 @@ from typing import Any
 
 JOB_FAMILIES = {"computing", "non_computing", "mixed", "unclear"}
 DOCUMENT_FOCUS = {"technical", "transferable", "balanced", "conservative"}
+TECHNICAL_SECTION_TOKENS = ("technical skills", "compétences techniques", "hard skills")
+SOFT_SECTION_TOKENS = (
+    "soft skills", "compétences interpersonnelles", "compétences comportementales",
+    "communication", "collaboration",
+)
+SOFT_EVIDENCE_TOKENS = (
+    "delivered sessions", "explaining", "technical sessions", "communication",
+    "collaboration", "team", "stakeholder", "documentation", "review gates",
+    "read-only access controls", "knowledge sharing",
+)
 SCORE_FIELDS = {
     "candidate_evidence_id", "relevance", "evidence_strength", "specificity",
     "recency", "risk", "redundancy", "total", "job_evidence_keys",
@@ -61,6 +71,23 @@ def nonempty(value: Any) -> bool:
 
 def safe_string_set(value: Any) -> set[str]:
     return set(value) if isinstance(value, list) and all(isinstance(item, str) for item in value) else set()
+
+
+def has_supported_soft_skill_evidence(evidence: dict[str, Any]) -> bool:
+    for fact in evidence.get("facts", []):
+        if not isinstance(fact, dict) or fact.get("category") not in {"experience", "project"}:
+            continue
+        claim = str(fact.get("claim", "")).casefold()
+        if any(token in claim for token in SOFT_EVIDENCE_TOKENS):
+            return True
+    return False
+
+
+def section_title_matches(sections: list[dict[str, Any]], tokens: tuple[str, ...]) -> bool:
+    return any(
+        any(token in str(section.get("title", "")).casefold() for token in tokens)
+        for section in sections if isinstance(section, dict)
+    )
 
 
 def ids(value: Any, known: set[str], label: str, errors: list[str], allow_empty: bool = False) -> None:
@@ -453,6 +480,7 @@ def validate(bundle: dict[str, Any], template: dict[str, Any], bundle_path: Path
     if not isinstance(sections, list) or not sections:
         errors.append("resume_sections must be non-empty")
         sections = []
+    rendered_education_record_counts: dict[str, int] = {}
     for si, section in enumerate(sections):
         if not isinstance(section, dict) or set(section) != {"title", "items"} or not nonempty(section.get("title")) or not isinstance(section.get("items"), list):
             errors.append(f"resume_sections.{si} has an invalid shape")
@@ -510,6 +538,12 @@ def validate(bundle: dict[str, Any], template: dict[str, Any], bundle_path: Path
                 ]
                 if not valid_records:
                     errors.append(f"{label} must copy institution, official degree, and field from a structured education record")
+                else:
+                    for record in valid_records:
+                        record_id = record.get("id")
+                        rendered_education_record_counts[record_id] = rendered_education_record_counts.get(record_id, 0) + 1
+                        if record.get("dates") and not nonempty(item.get("dates")):
+                            errors.append(f"{label}.dates must preserve the structured education record dates")
             if "highlights" in item:
                 if not isinstance(item["highlights"], list):
                     errors.append(f"{label}.highlights must be an array")
@@ -519,6 +553,34 @@ def validate(bundle: dict[str, Any], template: dict[str, Any], bundle_path: Path
                             errors.append(f"{label}.highlights.{hi} has an invalid shape")
                         else:
                             ids(highlight.get("evidence_ids"), candidate_ids, f"{label}.highlights.{hi}.evidence_ids", errors)
+
+    typed_education_record_ids = {
+        record.get("id") for record in evidence.get("records", {}).get("education", [])
+        if isinstance(record, dict) and nonempty(record.get("id"))
+    }
+    missing_education = sorted(
+        record_id for record_id in typed_education_record_ids
+        if rendered_education_record_counts.get(record_id, 0) == 0
+    )
+    if missing_education:
+        errors.append(
+            "resume must preserve every typed education record: " + ", ".join(missing_education)
+        )
+    duplicated_education = sorted(
+        record_id for record_id, count in rendered_education_record_counts.items() if count > 1
+    )
+    if duplicated_education:
+        errors.append(
+            "resume must render each typed education record exactly once: "
+            + ", ".join(duplicated_education)
+        )
+    if any(
+        isinstance(fact, dict) and fact.get("category") == "skill"
+        for fact in evidence.get("facts", [])
+    ) and not section_title_matches(sections, TECHNICAL_SECTION_TOKENS):
+        errors.append("resume must contain a technical-skills section when skill evidence exists")
+    if has_supported_soft_skill_evidence(evidence) and not section_title_matches(sections, SOFT_SECTION_TOKENS):
+        errors.append("resume must contain an evidence-backed soft-skills section when supported evidence exists")
 
     letter = bundle.get("motivation_letter")
     if not isinstance(letter, dict) or set(letter) != set(template["motivation_letter"]):

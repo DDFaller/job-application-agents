@@ -1,0 +1,11 @@
+interface:
+  display_name: "Sync Job Pipeline View"
+  short_description: "Publish a one-way Notion pipeline view"
+  default_prompt: "Use $sync-job-pipeline-view to publish my ranked jobs and applications to Notion."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "notion"
+      description: "Authenticated Notion workspace access"
+      transport: "streamable_http"
+      url: "https://mcp.notion.com/mcp"

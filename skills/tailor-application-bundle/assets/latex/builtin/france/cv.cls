@@ -29,14 +29,16 @@
 \definecolor{rightColor}{HTML}{EFEFEB}
 \pagenumbering{gobble}
 \setlength{\parindent}{0pt}
-\setlist[itemize]{leftmargin=0.45cm,itemsep=0pt,parsep=0pt,topsep=1pt}
+\setlist[itemize]{leftmargin=0.45cm,itemsep=1pt,parsep=0pt,topsep=1pt}
 
 \titleformat{\section}{\large\scshape\raggedright}{}{0em}{}[\titlerule]
 \titleformat{\subsection}{\scshape\raggedright}{}{0em}{}
 \titlespacing*{\section}{0pt}{5pt}{2pt}
 \titlespacing*{\subsection}{0pt}{3pt}{1pt}
 
-\newcommand{\datesubsection}[2]{\subsection[#1]{#1\hfill #2}}
+% Keep the visual hierarchy consistent: employers, institutions, and project
+% names are bold while the optional PDF bookmark remains plain text.
+\newcommand{\datesubsection}[2]{\subsection[#1]{\textbf{#1}\hfill #2}}
 \newcommand{\contact}[1]{%
   \if\relax\detokenize{#1}\relax\else\parbox[t]{0.82\linewidth}{\small #1}\par\vspace{3pt}\fi
 }
@@ -60,4 +62,5 @@
 \newcommand{\jobTitle}[1]{\begin{center}\Large\textbf{#1}\end{center}}
 \newcommand{\cvdescription}[1]{\small #1\par\vspace{1pt}}
 \newenvironment{cvitems}{\begin{itemize}}{\end{itemize}\vspace{-2pt}}
+\newcommand{\cvone}[2]{\noindent\textbf{#1:} #2\par\vspace{2pt}}
 \newcommand{\cvtext}[1]{\small #1\par}

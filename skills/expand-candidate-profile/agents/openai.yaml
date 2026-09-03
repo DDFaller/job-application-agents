@@ -1,0 +1,4 @@
+interface:
+  display_name: "Expand Candidate Profile"
+  short_description: "Discover and propose additive evidence"
+  default_prompt: "Use $expand-candidate-profile to find supported competencies hidden in my linked sources."

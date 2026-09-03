@@ -7,7 +7,6 @@ import argparse
 import json
 import re
 import shutil
-import subprocess
 import sys
 import tempfile
 import unicodedata
@@ -17,10 +16,14 @@ from typing import Any
 
 TAILOR_SKILL = Path(__file__).resolve().parents[2] / "tailor-application-bundle"
 sys.path.insert(0, str(TAILOR_SKILL / "scripts"))
-from latex_templates import fingerprint, render_resume, runtime_files, validate_structure  # noqa: E402
-
-
-TIMEOUT = 60
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(REPOSITORY_ROOT))
+from latex_templates import fingerprint, load_manifest, render_resume, runtime_files, validate_structure  # noqa: E402
+from job_application_agents.render_service.artifacts import ArtifactStore  # noqa: E402
+from job_application_agents.render_service.client import RenderJobFailure, RenderServiceClient  # noqa: E402
+from job_application_agents.render_service.config import artifact_root, firebase_project_id  # noqa: E402
+from job_application_agents.render_service.firestore import FirestoreRenderJobRepository  # noqa: E402
+from job_application_agents.render_service.models import CompileDocument  # noqa: E402
 
 
 def synthetic_bundle() -> dict[str, Any]:
@@ -94,50 +97,50 @@ def copy_runtime(template_dir: Path, output: Path) -> None:
 
 
 def compile_probe(template_dir: Path) -> dict[str, Any]:
-    xelatex = shutil.which("xelatex")
-    pdfinfo = shutil.which("pdfinfo")
-    pdftotext = shutil.which("pdftotext")
-    missing_tools = [name for name, value in (("xelatex", xelatex), ("pdfinfo", pdfinfo), ("pdftotext", pdftotext)) if not value]
-    if missing_tools:
-        raise RuntimeError("missing validation tools: " + ", ".join(missing_tools))
     bundle = synthetic_bundle()
     layout = "france" if template_dir.resolve().parent.name == "builtin" and template_dir.name == "france" else "sequential"
     with tempfile.TemporaryDirectory(prefix="jaa-template-probe-") as temporary:
         output = Path(temporary)
         copy_runtime(template_dir, output)
         (output / "resume.tex").write_text(render_resume(template_dir, bundle), encoding="utf-8")
-        for _ in range(2):
-            result = subprocess.run(
-                [xelatex, "-no-shell-escape", "-halt-on-error", "-file-line-error", "-interaction=nonstopmode", "resume.tex"],
-                cwd=output, capture_output=True, text=True, check=False, timeout=TIMEOUT,
+        manifest = load_manifest(template_dir)
+        client = RenderServiceClient(
+            FirestoreRenderJobRepository(firebase_project_id()), ArtifactStore(artifact_root())
+        )
+        with tempfile.TemporaryDirectory(prefix="jaa-template-result-") as result_temporary:
+            result_dir = Path(result_temporary)
+            result = client.compile_and_wait(
+                output,
+                (CompileDocument(
+                    "resume.tex", "resume.pdf", passes=2, max_pages=1,
+                    extract_raw_text=layout == "france",
+                ),),
+                result_dir,
+                idempotency_key=f"template-probe:{fingerprint(template_dir)}",
+                required_packages=tuple(manifest.get("required_packages", [])),
+                required_fonts=tuple(manifest.get("required_fonts", [])),
             )
-            if result.returncode:
-                detail = result.stderr.strip() or result.stdout.strip()[-1200:]
-                raise RuntimeError("synthetic XeLaTeX compile failed: " + detail)
-        info = subprocess.run([pdfinfo, "resume.pdf"], cwd=output, capture_output=True, text=True, check=False, timeout=TIMEOUT)
-        match = re.search(r"^Pages:\s+(\d+)$", info.stdout, re.MULTILINE)
-        if info.returncode or not match:
-            raise RuntimeError("could not inspect synthetic PDF page count")
-        pages = int(match.group(1))
-        if pages != 1:
-            raise RuntimeError(f"synthetic résumé must render exactly one page; rendered {pages}")
-        text_command = [pdftotext, "-raw", "resume.pdf", "-"] if layout == "france" else [pdftotext, "resume.pdf", "-"]
-        extracted = subprocess.run(text_command, cwd=output, capture_output=True, text=True, check=False, timeout=TIMEOUT)
-        if extracted.returncode or not extracted.stdout.strip():
-            raise RuntimeError("synthetic résumé has no extractable text")
-        text = normalized(extracted.stdout)
+            document = result["documents"]["resume.pdf"]
+            text_file = document["raw_text"] if layout == "france" else document["normalized_text"]
+            extracted = (result_dir / text_file).read_text(encoding="utf-8")
+        text = normalized(extracted)
         cursor = 0
         for anchor in expected_anchors(bundle, layout):
             position = text.find(anchor, cursor)
             if position < 0:
                 raise RuntimeError(f"synthetic résumé loses or reorders content near: {anchor}")
             cursor = position + len(anchor)
-        return {"compiled": True, "pages": pages, "text_chars": len(extracted.stdout.strip()), "reading_order": "passed"}
+        return {
+            "compiled": True, "pages": document["pages"],
+            "text_chars": document["text_chars"], "reading_order": "passed",
+        }
 
 
 def validate_template(template_dir: Path, *, compile_template: bool = True) -> tuple[int, dict[str, Any]]:
     root = template_dir.expanduser().resolve()
-    errors, dependencies, manifest = validate_structure(root)
+    errors, dependencies, manifest = validate_structure(
+        root, check_dependencies=not compile_template
+    )
     report: dict[str, Any] = {
         "template": str(root), "id": manifest.get("id") if manifest else None,
         "fingerprint": fingerprint(root) if manifest and not errors else None,
@@ -151,7 +154,15 @@ def validate_template(template_dir: Path, *, compile_template: bool = True) -> t
     if compile_template:
         try:
             report["quality"] = compile_probe(root)
-        except (OSError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        except RenderJobFailure as exc:
+            if exc.code == "MISSING_DEPENDENCY":
+                report["missing_dependencies"] = [
+                    value.strip() for value in exc.detail.split(",") if value.strip()
+                ]
+                return 2, report
+            report["errors"].append(str(exc))
+            return 1, report
+        except (OSError, RuntimeError) as exc:
             report["errors"].append(str(exc))
             return 1, report
     return 0, report

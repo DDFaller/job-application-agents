@@ -123,6 +123,39 @@ class TimingTests(unittest.TestCase):
         with mock.patch.object(timing, "now", return_value=timing.datetime(2026, 1, 1, 0, 0, 50, tzinfo=timing.timezone.utc)):
             self.assertTrue(timing.status_snapshot(record)["heartbeat_due"])
 
+    def test_summary_reports_queue_remote_and_unattributed_time(self):
+        record = {
+            "run_id": "classified", "status": "prepared",
+            "started_at": "2026-01-01T00:00:00+00:00",
+            "ended_at": "2026-01-01T00:00:10+00:00",
+            "events": [
+                {"event_id": "q", "kind": "queue", "started_at": "2026-01-01T00:00:01+00:00",
+                 "ended_at": "2026-01-01T00:00:04+00:00", "elapsed_ms": 3000},
+                {"event_id": "r", "kind": "remote", "started_at": "2026-01-01T00:00:04+00:00",
+                 "ended_at": "2026-01-01T00:00:06+00:00", "elapsed_ms": 2000},
+                {"event_id": "a", "kind": "active", "started_at": "2026-01-01T00:00:06+00:00",
+                 "ended_at": "2026-01-01T00:00:08+00:00", "elapsed_ms": 2000},
+            ],
+        }
+        result = timing.summary(record)
+        self.assertEqual(result["queue_ms"], 3000)
+        self.assertEqual(result["remote_ms"], 2000)
+        self.assertEqual(result["active_ms"], 2000)
+        self.assertEqual(result["unattributed_ms"], 3000)
+
+    def test_status_snapshot_includes_queued_stages(self):
+        record = {
+            "run_id": "queued", "status": "running",
+            "started_at": "2026-01-01T00:00:00+00:00", "ended_at": None,
+            "events": [{"event_id": "q", "skill": "prepare", "stage": "writer",
+                         "attempt": 1, "kind": "queue", "parallel_group": "apps",
+                         "status": "running", "started_at": "2026-01-01T00:00:01+00:00",
+                         "ended_at": None}],
+        }
+        snapshot = timing.status_snapshot(record)
+        self.assertEqual(snapshot["active_agents"], 0)
+        self.assertEqual(snapshot["queued_stages"][0]["stage"], "writer")
+
 
 if __name__ == "__main__":
     unittest.main()

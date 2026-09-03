@@ -240,6 +240,74 @@ class ValidatorTests(unittest.TestCase):
             )
             self.assertTrue(any("official degree" in error for error in errors))
 
+    def test_every_typed_education_record_and_date_must_be_rendered(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, candidate_path, bundle_path, _ = fixture(root)
+            candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+            candidate["records"]["education"] = [{
+                "id": "D001", "institution": "FAETEC",
+                "official_degree": "Technical Informatics course (BAC+2)",
+                "field": "Informatics", "track": None, "status": "completed",
+                "credential_awarded": False, "dates": "2015 to 2017", "evidence_ids": ["E001"],
+            }]
+            write_json(candidate_path, candidate)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["inputs"]["candidate_evidence_sha256"] = digest(candidate_path)
+            bundle["resume_sections"] = [{"title": "Education", "items": [{
+                "type": "education", "institution": "FAETEC", "area": "Informatics",
+                "degree": "Technical Informatics course (BAC+2)", "location": None,
+                "dates": None, "summary": None, "highlights": [], "evidence_ids": ["E001"],
+            }]}]
+            errors = bundle_validator.validate(
+                bundle, bundle_validator.load(SKILL_DIR / "references" / "bundle-template.json"), bundle_path,
+            )
+            self.assertTrue(any("dates must preserve" in error for error in errors))
+
+            bundle["resume_sections"] = [{"title": "Skills", "items": [{
+                "type": "one_line", "label": "Focus", "details": "Systems", "evidence_ids": ["E001"],
+            }]}]
+            errors = bundle_validator.validate(
+                bundle, bundle_validator.load(SKILL_DIR / "references" / "bundle-template.json"), bundle_path,
+            )
+            self.assertTrue(any("every typed education record" in error for error in errors))
+
+    def test_supported_skill_evidence_requires_hard_and_soft_skill_sections(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, candidate_path, bundle_path, _ = fixture(root)
+            candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+            candidate["facts"][0].update({
+                "category": "skill",
+                "claim": "Python",
+            })
+            candidate["facts"].append({
+                "id": "E004", "category": "experience",
+                "claim": "Delivered sessions explaining data formats and quality.",
+                "source_path": str(root / "experience.md"), "page": None,
+                "source_fact_ids": ["MC-EXP-002"],
+            })
+            write_json(candidate_path, candidate)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["inputs"]["candidate_evidence_sha256"] = digest(candidate_path)
+            bundle["tailoring_strategy"]["selected_candidate_evidence_ids"].append("E004")
+            bundle["tailoring_strategy"]["claim_scores"].append({
+                "candidate_evidence_id": "E004", "relevance": 1, "evidence_strength": 3,
+                "specificity": 2, "recency": 2, "risk": 0, "redundancy": 0,
+                "total": 12, "job_evidence_keys": ["responsibilities.0"],
+            })
+            bundle["resume_sections"] = [{
+                "title": "Experience", "items": [{
+                    "type": "text", "text": "Delivered sessions.", "evidence_ids": ["E004"],
+                }],
+            }]
+            bundle["match_analysis"]["matched"][0]["candidate_evidence_ids"].append("E004")
+            errors = bundle_validator.validate(
+                bundle, bundle_validator.load(SKILL_DIR / "references" / "bundle-template.json"), bundle_path,
+            )
+            self.assertTrue(any("technical-skills section" in error for error in errors))
+            self.assertTrue(any("soft-skills section" in error for error in errors))
+
     def test_claim_score_arithmetic_is_deterministic(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             _, _, bundle_path, _ = fixture(Path(temporary))

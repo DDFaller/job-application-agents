@@ -1,0 +1,4 @@
+interface:
+  display_name: "Onboard Job Search"
+  short_description: "Set up candidate facts and search preferences"
+  default_prompt: "Use $onboard-job-search to initialize or refine my job-search profile."

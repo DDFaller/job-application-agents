@@ -5,7 +5,16 @@ description: Orchestrate one job application by extracting a public opening, com
 
 # Prepare Job Application
 
+Ranked entries from `$rank-job-shortlist` are accepted as triage inputs, but
+the complete workflow still validates the normalized posting, source evidence,
+candidate evidence, and approved role profile before drafting.
+
 Coordinate `$extract-job-opening`, `$tailor-application-bundle`, and `$notion-track-application` in that order.
+
+This workflow is hands-off: it prepares and tracks a reviewable draft only.
+Never invoke the auto-apply engine, enqueue a submission job, contact an
+employer, or mark a record `APPLIED`. Notion credentials remain in the parent
+connector and must not be passed to nested workers.
 
 When invoked by `$manage-job-applications`, accept its timing-ledger path and
 run ID and append all stage events to that ledger. At minimum record job and
@@ -27,14 +36,15 @@ or backfill event timestamps from worker prose.
 ## End-to-end workflow
 
 1. Read `references/workflow.md` and resolve the application root.
-2. Start job extraction, candidate-evidence mapping/cache lookup, approved-profile resolution, and local XeLaTeX preflight concurrently. Submit all independent work before waiting. In managed mode, use the exact source and profile manifests supplied by `$manage-job-applications`. Reuse a validated evidence cache entry; only run the mapping agent while holding the cache-build lock on a miss. If multi-agent capacity is unavailable, report degraded serial mode.
+2. Start job extraction, candidate-evidence mapping/cache lookup, `$resolve-approved-role-profile`, and render-service preflight concurrently. Submit all independent work before waiting. In managed mode, use the exact read-only result supplied by `$manage-job-applications` and its explicit data root. Reuse a validated evidence cache entry; only run the mapping agent while holding the cache-build lock on a miss. If multi-agent capacity is unavailable, report degraded serial mode.
 3. Join and validate the job, schema-3 candidate evidence, and approved role-profile catalog. Require typed work/education records and an exact match between candidate sources and the catalog's source binding. Stop if any input is partial, stale, blocked, or missing identity/contact evidence.
    If candidate mapping is unavailable, close the active event, record a
    `kind: wait` event, and return `needs_input`; do not pass provisional output
    to tailoring.
-4. Run the complete `$tailor-application-bundle` workflow in reuse mode with candidate evidence and the approved catalog. Require profile ranking, claim scores, evidence partition, structural validation, and independent review. If it returns a validated profile proposal, record `needs_input`, return its reason and path, and stop before rendering or Notion.
+4. Run the complete `$tailor-application-bundle` workflow in reuse mode with candidate evidence and the approved catalog. Require profile ranking, claim scores, evidence partition, structural validation, `$humanize-application-copy` for the CV profile and motivation letter, and independent review. If it returns a validated profile proposal, record `needs_input`, return its reason and path, and stop before rendering or Notion. Do not invoke curriculum maintenance from this workflow.
 5. Start temporary XeLaTeX rendering concurrently with the distinct independent semantic-review agent. Use `--profile auto`: clearly French locations receive the preserved A4 sidebar template and all others receive the compact international template. The France profile requires the approved canonical candidate photo. Promote the staged artifacts only after the exact bundle receives a validated `accept` verdict. No visual inspection is required.
-6. Upsert the Notion record in `TO_APPLY` only after local success. The Notion synchronization must include the current resume and motivation-letter PDFs and the editable LaTeX sources (`resume.tex`, `letter.tex`, and `preamble.tex`); when individual `.tex` uploads are unsupported, attach a versioned ZIP containing those exact raw files.
+6. Compute the 100-point match score (Skills: 0–30, Experience: 0–25, Role: 0–20, Location: 0–15, Company Fit: 0–5, Compensation: 0–5) and upsert the Notion record in `TO_APPLY` only after local success. The Notion synchronization must include `Match Score` property, match breakdown callout, current resume and motivation-letter PDFs, and the editable LaTeX sources (`resume.tex`, `letter.tex`, and `preamble.tex`); when individual `.tex` uploads are unsupported, attach a versioned ZIP containing those exact raw files.
 7. Return the local version directory and Notion page URL. Do not submit the application.
+
 
 If Notion fails, keep the local bundle and retry synchronization from its manifest; do not regenerate documents. If extraction fails, request pasted content rather than bypassing authentication.

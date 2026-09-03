@@ -49,6 +49,7 @@ def main() -> int:
     parser.add_argument("--review", required=True, type=Path)
     parser.add_argument("--state-root", required=True, type=Path)
     parser.add_argument("--approval", required=True)
+    parser.add_argument("--sync-firestore", action="store_true", help="sync profiles to Firestore after commit")
     args = parser.parse_args()
     if args.approval != "APPROVED":
         print("commit refused: --approval must be exactly APPROVED", file=sys.stderr)
@@ -90,7 +91,22 @@ def main() -> int:
         approved["catalog_status"] = "approved"
         catalog_target = temporary / "role-profiles.json"
         catalog_target.write_text(json.dumps(approved, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        shutil.copy2(review_path, temporary / "profile-review.json")
+        # Keep the exact catalog reviewed by the independent reviewer inside
+        # the immutable version. The staged path may be temporary or may be
+        # reused by a later workflow, so the published review must not depend
+        # on it remaining in place.
+        review_snapshot = temporary / "review-inputs" / "role-profiles.json"
+        review_snapshot.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(catalog_path, review_snapshot)
+        published_review = dict(review)
+        published_review["inputs"] = {
+            "catalog_json": str(version_dir / "review-inputs" / "role-profiles.json"),
+            "catalog_sha256": digest(review_snapshot),
+        }
+        (temporary / "profile-review.json").write_text(
+            json.dumps(published_review, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
         write_json_atomic(temporary / "manifest.json", {
             "schema_version": 1,
             "version": version,
@@ -99,6 +115,8 @@ def main() -> int:
             "catalog_sha256": digest(catalog_target),
             "review": "profile-review.json",
             "review_sha256": digest(temporary / "profile-review.json"),
+            "review_catalog": "review-inputs/role-profiles.json",
+            "review_catalog_sha256": digest(review_snapshot),
             "source_manifest": approved["source_manifest"],
         })
         os.replace(temporary, version_dir)
@@ -110,6 +128,23 @@ def main() -> int:
             "source_manifest": approved["source_manifest"],
             "updated_at": datetime.now(timezone.utc).isoformat(),
         })
+
+        if args.sync_firestore or os.environ.get("JAA_SYNC_FIRESTORE") == "1":
+            try:
+                repo_root = Path(__file__).resolve().parents[3]
+                if str(repo_root) not in sys.path:
+                    sys.path.insert(0, str(repo_root))
+                from job_application_agents.render_service.config import firebase_project_id, get_user_id
+                from job_application_agents.sync.firestore import FirestoreUserSyncRepository
+                from job_application_agents.sync.service import SyncService
+
+                project = firebase_project_id()
+                user = get_user_id(state_root.parent)
+                sync_svc = SyncService(FirestoreUserSyncRepository(project), default_data_root=state_root.parent)
+                sync_svc.push_profiles(user, state_root.parent)
+            except Exception as sync_exc:
+                print(f"note: firestore profile sync skipped or failed: {sync_exc}", file=sys.stderr)
+
     except Exception as exc:
         shutil.rmtree(temporary, ignore_errors=True)
         print(f"commit failed: {exc}", file=sys.stderr)

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Generate Application Report"
+  short_description: "Build an offline application dashboard"
+  default_prompt: "Use $generate-application-report to create an offline dashboard of my job search."

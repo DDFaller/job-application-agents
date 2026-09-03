@@ -1,0 +1,8 @@
+{
+  "name": "humanizer",
+  "version": "2.11.2",
+  "skill_url": "https://raw.githubusercontent.com/blader/humanizer/main/SKILL.md",
+  "skill_sha256": "14fc8a965b6e0a8dc100ba4dffeab55cb94bbac112abbde7e014d5c15a35c202",
+  "license_url": "https://raw.githubusercontent.com/blader/humanizer/main/LICENSE",
+  "license_sha256": "4ac4810254ab36d45419141aeb8e69bf50652cfafe5b2dab947d06d44e5cbf96"
+}

@@ -13,8 +13,9 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 STATUS_HEARTBEAT_SECONDS = 45
+EVENT_KINDS = ("active", "wait", "queue", "remote")
 
 
 def now() -> datetime:
@@ -163,20 +164,36 @@ def finalize(path: Path, status: str, application_root: str | None,
 def summary(record: dict[str, Any]) -> dict[str, Any]:
     ended = parse_time(record["ended_at"]) if record.get("ended_at") else now()
     total_ms = max(0, round((ended - parse_time(record["started_at"])).total_seconds() * 1000))
-    active = [(parse_time(event["started_at"]), parse_time(event["ended_at"]))
-              for event in record["events"] if event["kind"] == "active" and event["ended_at"]]
-    active.sort()
-    merged: list[list[datetime]] = []
-    for start, finish in active:
-        if merged and start <= merged[-1][1]:
-            merged[-1][1] = max(merged[-1][1], finish)
-        else:
-            merged.append([start, finish])
-    active_ms = sum(round((finish - start).total_seconds() * 1000) for start, finish in merged)
-    wait_ms = sum(event["elapsed_ms"] or 0 for event in record["events"] if event["kind"] == "wait")
+    def intervals(kind: str) -> list[tuple[datetime, datetime]]:
+        return [
+            (parse_time(event["started_at"]), parse_time(event["ended_at"]))
+            for event in record["events"]
+            if event.get("kind") == kind and event.get("ended_at")
+        ]
+
+    def union_ms(values: list[tuple[datetime, datetime]]) -> int:
+        values.sort()
+        merged: list[list[datetime]] = []
+        for start, finish in values:
+            if merged and start <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], finish)
+            else:
+                merged.append([start, finish])
+        return sum(round((finish - start).total_seconds() * 1000) for start, finish in merged)
+
+    active_ms = union_ms(intervals("active"))
+    wait_ms = union_ms(intervals("wait"))
+    queue_ms = union_ms(intervals("queue"))
+    remote_ms = union_ms(intervals("remote"))
+    classified_ms = union_ms([
+        interval for kind in EVENT_KINDS for interval in intervals(kind)
+    ])
+    unattributed_ms = max(0, total_ms - classified_ms)
     errors = integrity_errors(record)
     return {"run_id": record["run_id"], "status": record.get("status"),
             "elapsed_ms": total_ms, "active_ms": active_ms, "wait_ms": wait_ms,
+            "queue_ms": queue_ms, "remote_ms": remote_ms,
+            "unattributed_ms": unattributed_ms,
             "integrity_valid": not errors, "integrity_errors": errors,
             "events": record["events"]}
 
@@ -193,13 +210,21 @@ def status_snapshot(record: dict[str, Any]) -> dict[str, Any]:
         }
         for event in events if event.get("ended_at") is None and event.get("kind") == "active"
     ]
+    queued = [
+        {
+            "event_id": event["event_id"], "skill": event["skill"], "stage": event["stage"],
+            "attempt": event["attempt"], "parallel_group": event.get("parallel_group"),
+        }
+        for event in events if event.get("ended_at") is None and event.get("kind") == "queue"
+    ]
     completed = [event["stage"] for event in events if event.get("ended_at") and event.get("status") == "completed"]
     latest = max(events, key=lambda event: event.get("ended_at") or event["started_at"], default=None)
     latest_time = parse_time(latest.get("ended_at") or latest["started_at"]) if latest else parse_time(record["started_at"])
     seconds_since_transition = max(0, round((current - latest_time).total_seconds()))
     return {
         "run_id": record["run_id"], "status": record.get("status"), "elapsed_ms": elapsed_ms,
-        "active_agents": len(active), "active_stages": active, "completed_stages": completed,
+        "active_agents": len(active), "active_stages": active, "queued_stages": queued,
+        "completed_stages": completed,
         "latest_transition": latest, "seconds_since_transition": seconds_since_transition,
         "heartbeat_due": record.get("ended_at") is None and seconds_since_transition >= STATUS_HEARTBEAT_SECONDS,
     }
@@ -219,7 +244,7 @@ def parser() -> argparse.ArgumentParser:
     start_parser.add_argument("--stage", required=True)
     start_parser.add_argument("--attempt", type=int, default=1)
     start_parser.add_argument("--parallel-group")
-    start_parser.add_argument("--kind", choices=("active", "wait"), default="active")
+    start_parser.add_argument("--kind", choices=EVENT_KINDS, default="active")
     finish_parser = sub.add_parser("finish")
     finish_parser.add_argument("--file", type=Path, required=True)
     finish_parser.add_argument("--event-id", required=True)

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Add Job Portal"
+  short_description: "Generate a public job-board integration"
+  default_prompt: "Use $add-job-portal to investigate and add this public job portal."

@@ -1,0 +1,55 @@
+services:
+  latex-worker:
+    build:
+      context: ..
+      dockerfile: deploy/docker/latex-worker/Dockerfile
+    environment:
+      JAA_FIREBASE_PROJECT_ID: ${JAA_FIREBASE_PROJECT_ID:?Set JAA_FIREBASE_PROJECT_ID}
+      JAA_ARTIFACT_ROOT: /artifacts
+      JAA_WORKER_ID: ${JAA_WORKER_ID:-local-live-worker}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/google-application-credentials.json
+    user: "${JAA_HOST_UID:-1000}:${JAA_HOST_GID:-1000}"
+    volumes:
+      - ${JAA_ARTIFACT_ROOT:?Set JAA_ARTIFACT_ROOT to an absolute host path}:/artifacts:z
+      - ${JAA_ADC_PATH:?Set JAA_ADC_PATH to the ADC credential file}:/run/secrets/google-application-credentials.json:ro,z
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "job_application_agents.render_service.worker", "--healthcheck"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+
+  notion-worker:
+    build:
+      context: ..
+      dockerfile: deploy/docker/notion-worker/Dockerfile
+
+    environment:
+      JAA_FIREBASE_PROJECT_ID: ${JAA_FIREBASE_PROJECT_ID:?Set JAA_FIREBASE_PROJECT_ID}
+      NOTION_TOKEN: ${NOTION_TOKEN:?Set NOTION_TOKEN}
+      NOTION_DATABASE_ID: ${NOTION_DATABASE_ID:-3c7ac433-f81d-80bd-959d-ecfeba5f8ffe}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/google-application-credentials.json
+    volumes:
+      - ${JAA_ADC_PATH:?Set JAA_ADC_PATH to the ADC credential file}:/run/secrets/google-application-credentials.json:ro,z
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+
+  playwright-worker:
+    # Never starts during the default live stack. Use the explicit
+    # `submission` profile only after setting JAA_ENABLE_SUBMISSION exactly.
+    profiles: ["submission"]
+    build:
+      context: ..
+      dockerfile: deploy/docker/playwright-worker/Dockerfile
+    environment:
+      JAA_FIREBASE_PROJECT_ID: ${JAA_FIREBASE_PROJECT_ID:?Set JAA_FIREBASE_PROJECT_ID}
+      JAA_ENABLE_SUBMISSION: ${JAA_ENABLE_SUBMISSION:-}
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/google-application-credentials.json
+    volumes:
+      - ${JAA_ADC_PATH:?Set JAA_ADC_PATH to the ADC credential file}:/run/secrets/google-application-credentials.json:ro,z
+    tmpfs:
+      - /tmp:size=512m,mode=1777

@@ -146,7 +146,9 @@ def missing_dependencies(template_dir: Path, manifest: dict[str, Any]) -> list[s
     return missing
 
 
-def validate_structure(template_dir: Path) -> tuple[list[str], list[str], dict[str, Any] | None]:
+def validate_structure(
+    template_dir: Path, *, check_dependencies: bool = True,
+) -> tuple[list[str], list[str], dict[str, Any] | None]:
     errors: list[str] = []
     root = template_dir.expanduser().resolve()
     if not root.is_dir():
@@ -234,7 +236,7 @@ def validate_structure(template_dir: Path) -> tuple[list[str], list[str], dict[s
                 errors.append(f"runtime file uses reserved name: {relative}")
     except (KeyError, TypeError, ValueError) as exc:
         errors.append(f"cannot resolve runtime files: {exc}")
-    missing = missing_dependencies(root, manifest) if not errors else []
+    missing = missing_dependencies(root, manifest) if check_dependencies and not errors else []
     return errors, missing, manifest
 
 
@@ -305,23 +307,48 @@ def render_resume(
     else:
         sidebar_sections, main_sections = [], sections
 
-    def format_contact_item(value: str) -> str:
-        escaped = latex_escape(value)
-        lower = value.lower()
-        if "github.com" in lower:
-            return r"\faGithub\ \href{https://" + escaped + "}{" + escaped + "}"
-        elif "linkedin.com" in lower:
-            return r"\faLinkedin\ \href{https://" + escaped + "}{" + escaped + "}"
-        elif "@" in lower:
-            return r"\faEnvelope\ \href{mailto:" + escaped + "}{" + escaped + "}"
-        elif lower.startswith("+") or any(c.isdigit() for c in lower):
-            return r"\faPhone\ " + escaped
-        elif "http" in lower or "www" in lower:
-            return r"\faGlobe\ \href{https://" + escaped + "}{" + escaped + "}"
-        return escaped
+    def format_contact(contacts: list[str], profile_id: str) -> str:
+        emails = []
+        phones = []
+        links = []
+
+        def href(value: str) -> str:
+            escaped = latex_escape(value)
+            if value.lower().startswith(("http://", "https://")):
+                return escaped
+            return "https://" + escaped
+
+        for value in contacts:
+            escaped = latex_escape(value)
+            lower = value.lower()
+            if "github.com" in lower:
+                links.append(rf"\href{{{href(value)}}}{{\faGithub}}")
+            elif "linkedin.com" in lower:
+                links.append(rf"\href{{{href(value)}}}{{\faLinkedin}}")
+            elif "@" in lower:
+                emails.append(rf"\faEnvelope\ \href{{mailto:{escaped}}}{{{escaped}}}")
+            elif lower.startswith("+") or any(c.isdigit() for c in lower):
+                phones.append(rf"\faPhone\ {escaped}")
+            elif "http" in lower or "www" in lower:
+                links.append(rf"\href{{{href(value)}}}{{\faGlobe}}")
+            else:
+                links.append(escaped)
+
+        if profile_id == "france":
+            lines = []
+            if emails:
+                lines.append(r"\filcenter{" + r" \textbar\ ".join(emails) + r"} \hfill \ \\")
+            if phones:
+                lines.append(r" \textbar\ ".join(phones) + r" \textbar \hfill\\")
+            if links:
+                lines.append(r" \textbar\ ".join(links))
+            return "\n".join(lines)
+        else:
+            all_items = emails + phones + links
+            return r" \textbar\ ".join(all_items)
 
     candidate = bundle["candidate"]
-    contact = r" \textbar\ ".join(format_contact_item(value) for value in candidate.get("contact", []))
+    contact = format_contact(candidate.get("contact", []), manifest["id"])
     main = safe_relative(root, manifest["main"]).read_text(encoding="utf-8")
     values: dict[str, object] = {
         "NAME": latex_escape(candidate.get("name", "")),

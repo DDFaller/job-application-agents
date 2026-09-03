@@ -1,0 +1,51 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function ownsUser(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    match /renderJobs/{jobId} {
+      allow read, write: if false;
+    }
+    match /renderWorkers/{workerId} {
+      allow read, write: if false;
+    }
+    match /notionJobs/{jobId} {
+      allow read, write: if false;
+    }
+    match /submissionJobs/{jobId} {
+      // Submission jobs are created and consumed by trusted server workers.
+      // A client must never be able to enqueue one directly.
+      allow read, write: if false;
+    }
+    match /automationIncidents/{incidentId} {
+      allow read, write: if false;
+    }
+
+    match /users/{userId} {
+      allow read, write: if ownsUser(userId);
+
+      match /applications/{applicationId} {
+        allow read: if ownsUser(userId);
+        allow create: if ownsUser(userId)
+          && request.resource.data.status != "APPLIED";
+        // A client may edit an already recorded APPLIED card's notes or
+        // scheduling fields, but cannot promote a draft to APPLIED.
+        allow update: if ownsUser(userId)
+          && (request.resource.data.status != "APPLIED"
+            || resource.data.status == "APPLIED");
+        allow delete: if ownsUser(userId);
+      }
+
+      match /{document=**} {
+        allow read, write: if ownsUser(userId);
+      }
+    }
+  }
+}

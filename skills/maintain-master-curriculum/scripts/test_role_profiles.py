@@ -81,7 +81,7 @@ class RoleProfileTests(unittest.TestCase):
     def test_approved_catalog_is_versioned_and_resolvable(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            _, catalog = self.fixture(root)
+            manifest_path, catalog = self.fixture(root)
             catalog_path = root / "role-profiles.json"
             catalog_path.write_text(json.dumps(catalog, indent=2) + "\n", encoding="utf-8")
             review = load(SKILL_DIR / "references" / "profile-review-template.json")
@@ -103,9 +103,48 @@ class RoleProfileTests(unittest.TestCase):
             resolve = subprocess.run([
                 sys.executable, str(SCRIPT_DIR / "resolve_profiles.py"),
                 "--state-root", str(state),
+                "--expected-source-manifest", str(manifest_path),
             ], text=True, capture_output=True, check=False)
             self.assertEqual(resolve.returncode, 0, resolve.stderr)
-            self.assertEqual(json.loads(resolve.stdout)["profiles"], ["backend-platform"])
+            resolved = json.loads(resolve.stdout)
+            self.assertEqual(resolved["profiles"], ["backend-platform"])
+            published = state / "profiles" / "versions" / resolved["version"]
+            review = json.loads((published / "profile-review.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                Path(review["inputs"]["catalog_json"]).resolve(),
+                published / "review-inputs" / "role-profiles.json",
+            )
+
+    def test_resolver_rejects_source_binding_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest_path, catalog = self.fixture(root)
+            catalog_path = root / "role-profiles.json"
+            catalog_path.write_text(json.dumps(catalog, indent=2) + "\n", encoding="utf-8")
+            review = load(SKILL_DIR / "references" / "profile-review-template.json")
+            review.update({
+                "inputs": {"catalog_json": str(catalog_path), "catalog_sha256": digest(catalog_path)},
+                "checks": {key: True for key in review["checks"]},
+                "findings": [], "verdict": "accept",
+                "reviewed_at": datetime.now(timezone.utc).isoformat(),
+            })
+            review_path = root / "profile-review.json"
+            review_path.write_text(json.dumps(review, indent=2) + "\n", encoding="utf-8")
+            state = root / "state"
+            commit = subprocess.run([
+                sys.executable, str(SCRIPT_DIR / "commit_profile_update.py"),
+                "--catalog", str(catalog_path), "--review", str(review_path),
+                "--state-root", str(state), "--approval", "APPROVED",
+            ], text=True, capture_output=True, check=False)
+            self.assertEqual(commit.returncode, 0, commit.stderr)
+            other_manifest = root / "other-current.json"
+            other_manifest.write_text(manifest_path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+            resolve = subprocess.run([
+                sys.executable, str(SCRIPT_DIR / "resolve_profiles.py"),
+                "--state-root", str(state),
+                "--expected-source-manifest", str(other_manifest),
+            ], text=True, capture_output=True, check=False)
+            self.assertEqual(resolve.returncode, 2)
 
 
 if __name__ == "__main__":

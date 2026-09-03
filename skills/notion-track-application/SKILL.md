@@ -5,19 +5,21 @@ description: Create, deduplicate, update, and move job application records in th
 
 # Track Applications in Notion
 
-Use only the connected Notion MCP. Do not request or store a separate Notion API token.
+Applications can be tracked in Notion via:
+1. **Automated Cloud Worker (Recommended)**: Asynchronous queue-based sync via `python3 scripts/sync.py worker-notion --live` or the containerized daemon (`deploy/docker/notion-worker`), which automatically uploads PDFs/LaTeX ZIPs via the 2-step protocol and populates the user's private database.
+2. **Interactive Notion MCP**: Direct interactive manipulation in chat using the connected Notion MCP.
 
-When called from `$prepare-job-application`, accept the shared timing-ledger
-path and run ID. Record workspace fetch, database/deduplication lookup, upload
-target creation and PDF uploads, page mutation, verification, and any retry as
-separate events. A missing Notion connection is a `kind: wait`/blocked event;
-leave local artifacts unchanged and preserve the ledger.
 
 `Generated At` is the authoritative timestamp for when the current application
 bundle was generated. `Applied At` is the separate submission timestamp; never
 derive one from the other. Board audits of bundle completeness or recency and
 unanswered-application age calculations must inspect `Generated At`; `Applied
 At` remains submission metadata.
+
+Lifecycle updates from `$track-application-outcome` may set interview-stage,
+offer, rejection, or withdrawal statuses when explicitly reported or approved
+from a source-cited email proposal. `$sync-job-pipeline-view` is a separate
+one-way presentation lane and does not own application attachments.
 
 Delegate board reviews and stale-card sweeps to `$requeue-unanswered-applications`.
 Its normal review mode may change only qualifying `APPLIED` statuses to
