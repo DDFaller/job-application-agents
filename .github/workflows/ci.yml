@@ -11,7 +11,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      JAA_ARTIFACT_ROOT: ${{ runner.temp }}/jaa-render-artifacts
+      JAA_ARTIFACT_ROOT: ${{ github.workspace }}/.render-service/artifacts
       JAA_FIREBASE_PROJECT_ID: demo-job-application-agents
       FIRESTORE_EMULATOR_HOST: 127.0.0.1:8080
       JAA_WORKER_ID: github-emulator-${{ github.run_id }}-${{ github.run_attempt }}
