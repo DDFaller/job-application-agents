@@ -20,8 +20,10 @@ class ManualEditReviewTests(unittest.TestCase):
             version.mkdir()
             job = version / "job.json"
             evidence = version / "candidate-evidence.json"
+            profiles = version / "role-profiles.json"
             job.write_text("{}", encoding="utf-8")
             evidence.write_text("{}", encoding="utf-8")
+            profiles.write_text("{}", encoding="utf-8")
             text_hashes = {"resume.pdf": "a", "motivation-letter.pdf": "b"}
             (version / "manifest.json").write_text(json.dumps({
                 "document_revision": 2, "document_text_sha256": text_hashes,
@@ -33,6 +35,8 @@ class ManualEditReviewTests(unittest.TestCase):
                     "job_json": str(job.resolve()), "job_sha256": hashlib.sha256(job.read_bytes()).hexdigest(),
                     "candidate_evidence_json": str(evidence.resolve()),
                     "candidate_evidence_sha256": hashlib.sha256(evidence.read_bytes()).hexdigest(),
+                    "role_profiles_json": str(profiles.resolve()),
+                    "role_profiles_sha256": hashlib.sha256(profiles.read_bytes()).hexdigest(),
                 },
                 "document_text_sha256": text_hashes,
                 "checks": {key: True for key in validator.CHECKS},

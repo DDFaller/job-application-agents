@@ -24,6 +24,12 @@ hand-author event times or copy events from another run. Before returning a
 report, run `workflow_timing.py validate --file <ledger>`. If validation
 fails, aggregate durations are untrusted and the run is a timing failure.
 
+Credentials are coordinator-only. Never put Notion tokens, Gmail credentials,
+Firebase credentials, browser cookies, or provider API keys in a child prompt,
+artifact, timing ledger, session argument, or repository file. The parent may
+invoke an authenticated integration only through its configured connector or
+server-side secret; workers receive paths and redacted results, not secrets.
+
 The final response must include end-to-end elapsed time, active elapsed time,
 wait time, and a chronological event table. Mention `parallel_group` values
 when stages overlap; do not add concurrent durations together when calculating
@@ -44,14 +50,35 @@ active elapsed time. Only the coordinator may finalize the ledger.
 - Launch independent applications or independent operations concurrently by default. Submit the parallel worker batch before waiting for any individual result.
 - Use `fork_turns: none` and pass each worker only its task-specific opening, required local roots, selected worker skill, and output contract.
 - Serialize only work with a real dependency, an approval gate, or insufficient concurrency capacity. When capacity is constrained, run the largest safe parallel batch and continue with the next batch as slots become available; never absorb worker work into the parent session as a fallback.
-- For a single application, reserve enough capacity for at least the job-extraction agent, candidate-evidence agent on a cache miss, Terra writer, and independent Luna reviewer. If the configured six-worker capacity is unavailable, announce degraded serial mode rather than silently suppressing delegation.
+- For a single application, reserve enough capacity for at least the job-extraction agent, candidate-evidence agent on a cache miss, Terra writer, constrained Humanizer copy agent, and independent Luna reviewer. If the configured six-worker capacity is unavailable, announce degraded serial mode rather than silently suppressing delegation.
+
+Use `job_application_agents.orchestration.CapacityScheduler` for the local
+reservation decision when a queue has more than one application. Read
+`JAA_WORKFLOW_MAX_NESTED_SLOTS` (default `6`) and reserve five slots for a
+cache miss, or four for a validated evidence-cache hit. The fifth worker is
+the constrained Humanizer pass for the CV summary and motivation letter.
+Record an item as
+`kind: queue` while it is waiting for a reservation and release the lease as
+soon as its worker finishes. `JAA_WORKFLOW_MAX_CONCURRENT_APPLICATIONS`
+defaults to `1` for complete cache-miss pipelines; it is a scheduling guard,
+not a reason to stop filling capacity with safe cache-hit work.
 
 ## Route the request
 
-- New or updated candidate evidence: delegate `$maintain-master-curriculum` and preserve its approval gate.
+- New or updated candidate evidence or role profiles: delegate `$maintain-master-curriculum` and preserve its separate approval gates.
+- Candidate onboarding or preference changes: delegate `$onboard-job-search`.
 - One complete application: delegate `$prepare-job-application`.
 - Opening extraction only: delegate `$extract-job-opening`.
+- Job queue ranking or prioritization: delegate `$rank-job-shortlist`.
 - Documents from an already validated opening: delegate `$tailor-application-bundle`.
+- Application stages, results, or follow-ups: delegate `$track-application-outcome`.
+- Email-derived application signals: delegate `$sync-application-email`.
+- Interview preparation: delegate `$prepare-interview`.
+- Profile enrichment: delegate `$expand-candidate-profile`.
+- Skill-gap planning: delegate `$plan-upskilling`.
+- Offline analytics: delegate `$generate-application-report`.
+- One-way Notion pipeline presentation: delegate `$sync-job-pipeline-view`.
+- New public job portal: delegate `$add-job-portal`.
 - Notion synchronization or status update only: delegate `$notion-track-application`.
 - Live board review or unanswered-application requeue/sweep: delegate `$requeue-unanswered-applications`; do not implement the threshold or status transition in the coordinator.
 - Existing Notion status-column backfill: query the live column, audit current artifacts, and delegate only noncompliant bundles through `$tailor-application-bundle` followed by `$notion-track-application`.
@@ -63,11 +90,11 @@ Delegate every live board review to `$requeue-unanswered-applications`. Its norm
 ## Coordinate an application queue
 
 1. Normalize each item to a public URL or pasted description and assign a stable queue label. Do not retrieve authenticated or private postings.
-2. Check that the canonical curriculum exists and is ready. If it needs changes, run one curriculum-maintenance delegation first and stop for the user's explicit approval before committing those changes.
-   Before routing a complete application, run the master-curriculum source
-   resolver against `sources/current.json`. It verifies the live Markdown
-   hashes. Pass the resolved source directory and manifest to the worker; do
-   not require a state-root readiness report, receipt, or generated profile.
+2. Check that the canonical curriculum and approved role-profile catalog exist and are mutually compatible. If facts or profiles need changes, run one curriculum-maintenance delegation first and stop for explicit approval before publishing.
+   Run `$resolve-approved-role-profile` with the explicit `<data-root>`; it
+   resolves both contracts and verifies their exact binding. Pass its complete
+   read-only result to the worker. Never accept a stale, staged, shadow, or
+   job-generated profile catalog.
 3. For every ready item, prepare a clean-context subagent task with `fork_turns: none`. Tell it to use `$prepare-job-application`, provide the opening, resolved source manifest and Markdown directory, and require a concise result containing status, artifact directory, Notion URL, and blockers.
 4. Spawn the largest safe batch of independent application workers concurrently before waiting. Keep the parent agent free to coordinate results and reserve capacity for the nested extraction and review agents required by `$prepare-job-application`. As workers finish, immediately fill available slots from the remaining queue. Use a single-worker batch only when the actual concurrency limit or a dependency requires it.
 5. Retry only the failed stage. If Notion synchronization fails after local success, delegate `$notion-track-application` using the existing manifest; never regenerate accepted documents just to retry tracking.
@@ -75,6 +102,10 @@ Delegate every live board review to `$requeue-unanswered-applications`. Its norm
    fresh attempt number and staging directory. Revalidate the resulting
    per-run index against the Markdown manifest before opening tailoring. Never
    tailor from a provisional or unvalidated index.
+   If tailoring returns `profile-proposal.json`, finalize the application as
+   `needs_input` and wait. A separate explicit curriculum-maintenance request
+   may route the proposal to `$maintain-master-curriculum`; never auto-publish
+   it or use a generic fallback.
 6. Return a compact queue summary with `prepared`, `needs input`, or `failed` for every item and the corresponding artifact or blocker.
 
 ## Backfill a live Notion queue
@@ -95,5 +126,8 @@ Tell every worker to:
 - Use only supported candidate facts and preserve evidence citations.
 - Validate all structured artifacts and stop on partial or blocked inputs.
 - Never submit an application, contact an employer, or change application status to `APPLIED` without a separate explicit user request.
+- Treat the run as hands-off by default: prepare, review, and stage only. Do
+  not invoke auto-apply, submission queues, browser form submission, or status
+  promotion as a completion shortcut.
 
 Do not silently bypass approval, evidence, validation, independent-review, or authentication gates defined by the worker skills.

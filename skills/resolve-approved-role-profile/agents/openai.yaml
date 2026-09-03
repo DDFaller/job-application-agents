@@ -1,0 +1,4 @@
+interface:
+  display_name: "Resolve Approved Role Profile"
+  short_description: "Read-only approved profile resolution"
+  default_prompt: "Use $resolve-approved-role-profile to read and validate the canonical approved role-profile catalog for this application. Do not write curriculum or profile state."

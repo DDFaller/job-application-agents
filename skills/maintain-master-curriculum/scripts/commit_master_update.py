@@ -67,6 +67,7 @@ def main() -> int:
     parser.add_argument("--source-dir", required=True, type=Path)
     parser.add_argument("--state-root", required=True, type=Path)
     parser.add_argument("--approval", required=True)
+    parser.add_argument("--sync-firestore", action="store_true", help="sync curriculum to Firestore after commit")
     args = parser.parse_args()
     if args.approval != "APPROVED":
         print("commit refused: --approval must be exactly APPROVED", file=sys.stderr)
@@ -192,6 +193,23 @@ def main() -> int:
             "updated_at": created_at,
         }
         write_json_atomic(state / "current.json", current)
+
+        if args.sync_firestore or os.environ.get("JAA_SYNC_FIRESTORE") == "1":
+            try:
+                repo_root = Path(__file__).resolve().parents[3]
+                if str(repo_root) not in sys.path:
+                    sys.path.insert(0, str(repo_root))
+                from job_application_agents.render_service.config import firebase_project_id, get_user_id
+                from job_application_agents.sync.firestore import FirestoreUserSyncRepository
+                from job_application_agents.sync.service import SyncService
+
+                project = firebase_project_id()
+                user = get_user_id(source.parent)
+                sync_svc = SyncService(FirestoreUserSyncRepository(project), default_data_root=source.parent)
+                sync_svc.push_curriculum(user, source.parent)
+            except Exception as sync_exc:
+                print(f"note: firestore curriculum sync skipped or failed: {sync_exc}", file=sys.stderr)
+
     except Exception as exc:
         if installed and source.exists():
             failed = archives / f"failed-{version}"

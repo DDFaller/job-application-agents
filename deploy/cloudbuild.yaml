@@ -1,0 +1,26 @@
+steps:
+  # 1. Build and push Playwright Worker
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/playwright-worker', '-f', 'deploy/docker/playwright-worker/Dockerfile', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/playwright-worker']
+
+  # 2. Build and push Notion Worker
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/notion-worker', '-f', 'deploy/docker/notion-worker/Dockerfile', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/notion-worker']
+
+  # 3. Build and push LaTeX Worker
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/latex-worker', '-f', 'deploy/docker/latex-worker/Dockerfile', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/latex-worker']
+
+images:
+  - 'gcr.io/$PROJECT_ID/playwright-worker'
+  - 'gcr.io/$PROJECT_ID/notion-worker'
+  - 'gcr.io/$PROJECT_ID/latex-worker'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

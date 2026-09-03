@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "id": "international",
+  "display_name": "International CV",
+  "description": "Compact US Letter CV adapted from the downloaded Jake Gutierrez sb2nov-style template.",
+  "engine": "xelatex",
+  "main": "international_cv.tex.tmpl",
+  "required_packages": [
+    "fontspec.sty",
+    "geometry.sty",
+    "titlesec.sty",
+    "xcolor.sty",
+    "enumitem.sty",
+    "hyperref.sty",
+    "fancyhdr.sty",
+    "fontawesome5.sty",
+    "tabularx.sty"
+  ],
+  "required_fonts": [],
+  "fragments": {
+    "section": ".jaa/section.tex.tmpl",
+    "highlight": ".jaa/highlight.tex.tmpl",
+    "experience": ".jaa/experience.tex.tmpl",
+    "education": ".jaa/education.tex.tmpl",
+    "normal": ".jaa/normal.tex.tmpl",
+    "one_line": ".jaa/one-line.tex.tmpl",
+    "publication": ".jaa/publication.tex.tmpl",
+    "bullet": ".jaa/bullet.tex.tmpl",
+    "numbered": ".jaa/numbered.tex.tmpl",
+    "reversed_numbered": ".jaa/reversed-numbered.tex.tmpl",
+    "text": ".jaa/text.tex.tmpl"
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rank Job Shortlist"
+  short_description: "Batch-score and prioritize job openings"
+  default_prompt: "Use $rank-job-shortlist to rank my staged jobs and show the strongest matches."

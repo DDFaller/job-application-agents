@@ -62,7 +62,7 @@ class CandidateEvidenceCacheTests(unittest.TestCase):
             source = root / "experience.md"
             evidence = entry / "candidate-evidence.json"
             record = {
-                "schema_version": 2,
+                "schema_version": 3,
                 "extraction_status": "complete",
                 "candidate": {
                     "name": "Candidate", "headline": None, "location": None,
@@ -75,8 +75,9 @@ class CandidateEvidenceCacheTests(unittest.TestCase):
                 }],
                 "facts": [{
                     "id": "E001", "category": "certification", "claim": "evidence",
-                    "source_path": str(source), "page": None,
+                    "source_path": str(source), "page": None, "source_fact_ids": [],
                 }],
+                "records": {"experience": [], "education": []},
                 "field_evidence": {
                     "candidate.name": ["E001"], "candidate.contact.0": ["E001"],
                 },

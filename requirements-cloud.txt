@@ -1,0 +1,4 @@
+# Optional Firestore/Firebase runtime. Install with: python -m pip install -e '.[cloud]'
+firebase-functions>=0.4,<1
+firebase-admin>=7,<8
+google-cloud-storage>=3.1.1,<4

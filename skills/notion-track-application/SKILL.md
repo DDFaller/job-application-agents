@@ -5,19 +5,21 @@ description: Create, deduplicate, update, and move job application records in th
 
 # Track Applications in Notion
 
-Use only the connected Notion MCP. Do not request or store a separate Notion API token.
+Applications can be tracked in Notion via:
+1. **Automated Cloud Worker (Recommended)**: Asynchronous queue-based sync via `python3 scripts/sync.py worker-notion --live` or the containerized daemon (`deploy/docker/notion-worker`), which automatically uploads PDFs/LaTeX ZIPs via the 2-step protocol and populates the user's private database.
+2. **Interactive Notion MCP**: Direct interactive manipulation in chat using the connected Notion MCP.
 
-When called from `$prepare-job-application`, accept the shared timing-ledger
-path and run ID. Record workspace fetch, database/deduplication lookup, upload
-target creation and PDF uploads, page mutation, verification, and any retry as
-separate events. A missing Notion connection is a `kind: wait`/blocked event;
-leave local artifacts unchanged and preserve the ledger.
 
 `Generated At` is the authoritative timestamp for when the current application
 bundle was generated. `Applied At` is the separate submission timestamp; never
 derive one from the other. Board audits of bundle completeness or recency and
 unanswered-application age calculations must inspect `Generated At`; `Applied
 At` remains submission metadata.
+
+Lifecycle updates from `$track-application-outcome` may set interview-stage,
+offer, rejection, or withdrawal statuses when explicitly reported or approved
+from a source-cited email proposal. `$sync-job-pipeline-view` is a separate
+one-way presentation lane and does not own application attachments.
 
 Delegate board reviews and stale-card sweeps to `$requeue-unanswered-applications`.
 Its normal review mode may change only qualifying `APPLIED` statuses to
@@ -30,8 +32,8 @@ Its normal review mode may change only qualifying `APPLIED` statuses to
 3. Fetch the database before every create or update. Use its exact data-source ID and property names.
 4. Deduplicate with a parameterized data-source query: canonical `Job URL`, then `Source Job ID` plus company and role.
 5. Create or update the page only after the local bundle and manifest exist. For schema-3 manifests, verify every current artifact hash, require `semantic_review.verdict: accept` and `semantic_review.status: fresh`, and require passed PDF quality gates. A direct LaTeX edit with changed extracted text is blocked until a fresh independent evidence review is recorded. Existing schema-1/2 bundles remain eligible only for synchronization retry under their original rules.
-6. Create upload targets for the current resume and motivation-letter PDFs plus `resume.tex`, `letter.tex`, and `preamble.tex`. Send the independent uploads concurrently, then use all returned attachment Markdown values in the page. Keep page mutation and post-mutation verification sequential.
-7. Preserve unrelated page content. Replace only the stable `Current Documents` section when regenerating.
+6. Always send the editable LaTeX sources with the PDFs. Create upload targets for the current resume and motivation-letter PDFs plus `resume.tex`, `letter.tex`, and `preamble.tex` (and any renderer utility required by the frozen template). Send the independent uploads concurrently, then use all returned attachment Markdown values in the page. If Notion rejects the `.tex` extension, package the untouched `.tex` files with their exact filenames into a versioned ZIP, upload that ZIP, and include its attachment in `Current Documents`; a PDF-only sync is incomplete. Keep page mutation and post-mutation verification sequential.
+7. Preserve unrelated page content. Replace only the stable `Current Documents` section when regenerating, including the current PDFs and the editable-source attachment (individual `.tex` files or the required ZIP fallback).
 8. Apply the status/date rules in the reference and fetch the page after mutation to verify it.
 
 ## Backfill existing bundles

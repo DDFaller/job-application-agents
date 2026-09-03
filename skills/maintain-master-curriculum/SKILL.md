@@ -1,20 +1,33 @@
 ---
 name: maintain-master-curriculum
-description: Build, update, version, and audit the canonical Markdown evidence library used by tailor-application-bundle. Use when Codex needs to initialize or correct a master curriculum, add work, projects, skills, education, certifications, languages, contact details, or portfolio facts, or diagnose whether candidate sources are complete enough to create an evidence-backed application bundle. Never invent candidate facts or change approved sources without previewing the exact update.
+description: Build, update, version, and audit the canonical Markdown evidence library and separately propose, review, approve, and version evidence-backed role profiles used by application skills. Use when Codex needs to initialize or correct candidate facts, assess a requested professional profile, discover supported positioning, resolve a no-match profile proposal, or diagnose application readiness. Never invent candidate facts or publish facts or profiles without previewing the exact update.
 ---
 
 # Maintain Master Curriculum
 
 Maintain a curated evidence library. Treat approved direct user statements and supplied documents as equally valid inputs, but never infer absent facts.
 
+Keep ingestion neutral. Store only factual evidence in canonical Markdown;
+derive professional positioning afterward as a separate approved artifact.
+
+For first-time setup or search-preference changes, `$onboard-job-search` owns
+the interview and delegates factual writes here. Search preferences remain a
+separate approved artifact and must not be mixed into neutral candidate facts.
+
 ## Resolve paths and contracts
 
-- Default the canonical source directory to `~/Documents/job-search/sources`.
-- Keep the canonical source folder at `~/Documents/job-search/sources`; its
+- Default the canonical source directory to `<data-root>/sources` (resolved from `--data-root`, `JAA_DATA_ROOT`, `./job-search/sources`, or `~/Documents/job-search/sources`).
+- The canonical profile state root is `<data-root>/master-curriculum`; its
+  profile pointer is `<data-root>/master-curriculum/profiles/current.json`.
+  Never publish profiles with the data root itself as `--state-root`.
+- Keep the canonical source folder at `<data-root>/sources`; its
   `current.json` is the only hot-path retrieval pointer. Historical versions,
   reviews, and audits remain optional archival data under
-  `~/Documents/job-search/master-curriculum`.
+  `<data-root>/master-curriculum`.
+
 - Read `references/source-layout.md` before proposing or auditing sources.
+- Read `references/role-profiles.md` before discovering, requesting, reviewing,
+  or publishing professional profiles.
 - Resolve the installed `$tailor-application-bundle` skill and read its `SKILL.md`, `references/candidate-evidence-template.json`, and candidate-evidence validator before work. Treat those live resources as authoritative; do not reproduce their schema.
 - Keep imported originals and generated application resumes outside the canonical source directory. Never import content under an `applications/` or `mock/` directory automatically.
 
@@ -39,17 +52,55 @@ python3 scripts/commit_master_update.py \
   --review <additions-review.json> \
   --source-dir <canonical-source-directory> \
   --state-root <state-root> \
-  --approval APPROVED
+  --approval APPROVED \
+  --sync-firestore
 ```
 
-The script reruns both validators, rejects non-accepted or stale reviews, creates an immutable `vNNN`, preserves the review and its input snapshots, moves any prior canonical directory to a recoverable archive, installs the approved version, and updates `current.json`. Never edit an immutable version. If approval is withheld or the commit fails, leave canonical sources unchanged.
+The script reruns both validators, rejects non-accepted or stale reviews, creates an immutable `vNNN`, preserves the review and its input snapshots, moves any prior canonical directory to a recoverable archive, installs the approved version, updates `current.json`, and synchronizes the canonical curriculum to Firestore under `users/{userId}/curriculum/current` when Firebase is connected. Never edit an immutable version. If approval is withheld or the commit fails, leave canonical sources unchanged.
+
+## Discover and publish role profiles
+
+1. Resolve and validate `sources/current.json`. Use only its canonical facts;
+   never use generated résumés, prior bundles, or job requirements as candidate
+   evidence.
+2. Read `references/role-profiles.md` and
+   `references/role-profiles-template.json`. Support both open discovery and a
+   user-requested target profile. Do not use a fixed catalog.
+3. Spawn one clean-context Terra agent to draft a staged catalog. Require one
+   anchor fact, two distinct supporting facts, a supported seniority ceiling,
+   demonstrated technologies, allowed positioning facts, prohibited claims,
+   and risk notes for every profile. Bind it to the exact source-manifest hash
+   and fingerprint.
+4. Run `scripts/validate_role_profiles.py`. Send exact errors to the same agent
+   once for repair.
+5. Spawn a separate clean-context Luna agent with the catalog, canonical
+   sources, `references/profile-review-template.json`, and no job posting.
+   Require it to review grounding, evidence sufficiency, seniority, coherence,
+   and explicit risks. Run `scripts/validate_profile_review.py`.
+6. Show the user the exact current-to-staged profile diff, review findings, and
+   unresolved gaps. Publish only after explicit approval with
+   `scripts/commit_profile_update.py --approval APPROVED --sync-firestore`. The command writes
+   immutable `pNNN` history under `<state-root>/profiles/`, updates
+   `<state-root>/profiles/current.json`, and syncs to Firestore under `users/{userId}/profiles/current`.
+7. Treat every source-manifest change as invalidating the current catalog.
+   Facts may still be committed independently, but application preparation
+   must pause until a compatible catalog is approved.
+
+When another workflow returns `profile-proposal.json`, validate it with
+`scripts/validate_profile_proposal.py`, explain why the new profile was
+proposed, then run the same independent review and approval flow. A proposal is
+never approval and never resumes an application automatically.
 
 ## Run the compatibility audit
 
 1. Use the exact candidate evidence workflow in `$tailor-application-bundle` against the canonical source directory. Write snapshots and `candidate-evidence.json` into a unique audit staging directory under the state root.
 2. Run the live candidate-evidence validator. Exit `0` is compatible, exit `2` needs candidate input, and exit `1` is blocked by invalid evidence or contract drift.
 3. Review the validated evidence for the quality checks in `references/readiness-rubric.md`. Classify technical failures as hard blockers and useful-but-absent detail as quality gaps. A missing qualification for a particular job is not a master-curriculum failure.
-4. Write `readiness.json` using `references/readiness-template.json`. Cite concise questions for gaps instead of inventing answers.
+4. Resolve the separate approved profile catalog and write its `ready`,
+   `missing`, or `stale` result into `readiness.json` using
+   `references/readiness-template.json`. Cite concise questions for gaps
+   instead of inventing answers. Profile absence does not invalidate factual
+   readiness, but it blocks application tailoring.
 5. Run `scripts/validate_readiness.py --report <readiness.json>`. Accept only exit `0`, then copy the report to `<state-root>/readiness-current.json` and preserve the audit-specific copy.
 6. Return the source version, readiness status, hard blockers, quality gaps, candidate-evidence path, and readiness-report path.
 
@@ -63,6 +114,13 @@ candidate-evidence JSON may be derived from the Markdown for bundle-schema
 compatibility, but it is never a second source of truth and is not required in
 the master-curriculum state directory.
 
+The separate positioning contract is `<state-root>/profiles/current.json`.
+Consumers that need profiles for an application use the read-only
+`$resolve-approved-role-profile` skill. Maintenance diagnostics may run
+`scripts/resolve_profiles.py --state-root <data-root>/master-curriculum`; pass
+the resolved immutable catalog plus hash unchanged. A source pointer may exist
+without profiles, but application tailoring requires both compatible contracts.
+
 `publish_readiness.py` remains an optional archival audit publisher. Its output
 must not gate ordinary application retrieval.
 
@@ -72,5 +130,9 @@ must not gate ordinary application retrieval.
 - Rely on the Luna agent for additions review. Scripts may reject malformed, incomplete, or tampered artifacts but must not invent a semantic verdict.
 - Never generate claims, dates, employers, metrics, technologies, education, links, or language levels from implication.
 - Never write audit reports, snapshots, history, or generated application documents inside the canonical source directory.
+- Never write role profiles or profile proposals inside the canonical source directory.
+- Never use an ambiguous employer/client relationship or education credential
+  as a profile anchor. Report it as a quality gap until the source explicitly
+  names the relationship, official degree, status, and awarded credential.
 - Never submit an application or update Notion from this skill.
 - Keep this skill manually invoked; do not alter `$prepare-job-application` to call it automatically.

@@ -43,13 +43,43 @@ def fixture(root: Path) -> tuple[Path, Path, Path, Path]:
     candidate_path = root / "candidate-evidence.json"
     bundle_path = root / "bundle.json"
     review_path = root / "tailoring-review.json"
+    source = root / "experience.md"
+    source.write_text("evidence", encoding="utf-8")
+    source_manifest = root / "current.json"
+    source_hashes = {"experience.md": digest(source)}
+    write_json(source_manifest, {
+        "schema_version": 2, "version": "v001", "source_dir": str(root),
+        "markdown_sources": ["experience.md"], "source_hashes": source_hashes,
+    })
+    profiles_path = root / "role-profiles.json"
+    write_json(profiles_path, {
+        "schema_version": 1, "catalog_status": "approved",
+        "source_manifest": {
+            "path": str(source_manifest), "sha256": digest(source_manifest),
+            "fingerprint": hashlib.sha256(json.dumps(source_hashes, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+        },
+        "profiles": [{
+            "id": "systems-engineer", "label": "Systems Engineer", "narrative": "Build systems.",
+            "target_roles": ["Engineer"], "canonical_headline": "Systems Engineer", "seniority_ceiling": "mid",
+            "anchor_fact_ids": ["MC-EXP-001"], "supporting_fact_ids": ["MC-EXP-002", "MC-EXP-003"],
+            "technology_fact_ids": [],
+            "allowed_positioning_fact_ids": ["MC-EXP-001", "MC-EXP-002", "MC-EXP-003"],
+            "prohibited_claims": [], "risk_notes": [],
+        }], "generated_at": "2026-08-20T11:00:00+00:00",
+    })
     write_json(job_path, {
         "company": "Example", "role": "Engineer", "canonical_url": "https://example.test/job",
         "field_evidence": {"responsibilities.0": ["Build systems"]},
     })
     write_json(candidate_path, {
         "candidate": {"name": "Candidate", "location": None, "contact": ["candidate@example.test"]},
-        "facts": [{"id": "E001"}],
+        "sources": [{"path": str(source), "sha256": digest(source), "pages": None}],
+        "facts": [
+            {"id": "E001", "source_fact_ids": ["MC-EXP-001"]},
+            {"id": "E002", "source_fact_ids": ["MC-EXP-002"]},
+            {"id": "E003", "source_fact_ids": ["MC-EXP-003"]},
+        ],
+        "records": {"experience": [], "education": []},
     })
     bundle = json.loads((SKILL_DIR / "references" / "bundle-template.json").read_text(encoding="utf-8"))
     bundle.update({
@@ -57,12 +87,28 @@ def fixture(root: Path) -> tuple[Path, Path, Path, Path]:
             "job_json": str(job_path), "job_sha256": digest(job_path),
             "candidate_evidence_json": str(candidate_path),
             "candidate_evidence_sha256": digest(candidate_path),
+            "role_profiles_json": str(profiles_path),
+            "role_profiles_sha256": digest(profiles_path),
         },
         "job": {"company": "Example", "role": "Engineer", "canonical_url": "https://example.test/job"},
         "tailoring_strategy": {
             "job_family": "computing", "document_focus": "technical",
+            "profile_ranking": [{
+                "profile_id": "systems-engineer", "eligible": True, "score": 243,
+                "candidate_evidence_ids": ["E001", "E002", "E003"],
+                "job_evidence_keys": ["responsibilities.0"], "rationale": "Directly supported.",
+            }],
+            "selected_profile_id": "systems-engineer",
+            "selected_profile_anchor_evidence_ids": ["E001"],
+            "selected_profile_supporting_evidence_ids": ["E002", "E003"],
+            "positioning_candidate_evidence_ids": ["E001", "E002", "E003"],
+            "claim_scores": [{
+                "candidate_evidence_id": evidence_id, "relevance": 3, "evidence_strength": 3,
+                "specificity": 3, "recency": 3, "risk": 0, "redundancy": 0,
+                "total": 81, "job_evidence_keys": ["responsibilities.0"],
+            } for evidence_id in ("E001", "E002", "E003")],
             "job_priorities": [{"text": "Build systems", "job_evidence_keys": ["responsibilities.0"]}],
-            "selected_candidate_evidence_ids": ["E001"],
+            "selected_candidate_evidence_ids": ["E001", "E002", "E003"],
             "deprioritized_candidate_evidence_ids": [],
             "fit_arguments": [{"text": "Relevant", "candidate_evidence_ids": ["E001"], "job_evidence_keys": ["responsibilities.0"]}],
             "selection_rationale": {"text": "Relevant", "candidate_evidence_ids": ["E001"], "job_evidence_keys": ["responsibilities.0"]},
@@ -70,7 +116,7 @@ def fixture(root: Path) -> tuple[Path, Path, Path, Path]:
         "candidate": {
             "name": "Candidate", "headline": "Engineer", "headline_evidence_ids": ["E001"],
             "location": None, "contact": ["candidate@example.test"],
-            "summary": {"text": "Engineer", "evidence_ids": ["E001"]},
+            "summary": {"text": "Engineer", "evidence_ids": ["E001", "E002", "E003"]},
         },
         "resume_sections": [{"title": "Skills", "items": [{"type": "one_line", "label": "Focus", "details": "Systems", "evidence_ids": ["E001"]}]}],
         "motivation_letter": {
@@ -80,7 +126,7 @@ def fixture(root: Path) -> tuple[Path, Path, Path, Path]:
         },
         "match_analysis": {
             "matched": [{"text": "Relevant", "candidate_evidence_ids": ["E001"], "job_evidence_keys": ["responsibilities.0"]}],
-            "gaps": [],
+            "gaps": [], "credibility_warnings": [],
         },
         "generated_at": "2026-08-20T12:00:00+00:00",
     })
@@ -90,6 +136,7 @@ def fixture(root: Path) -> tuple[Path, Path, Path, Path]:
         "inputs": {
             "job_json": str(job_path), "job_sha256": digest(job_path),
             "candidate_evidence_json": str(candidate_path), "candidate_evidence_sha256": digest(candidate_path),
+            "role_profiles_json": str(profiles_path), "role_profiles_sha256": digest(profiles_path),
             "bundle_json": str(bundle_path), "bundle_sha256": digest(bundle_path),
         },
         "checks": {key: True for key in review["checks"]},
@@ -138,6 +185,173 @@ class ValidatorTests(unittest.TestCase):
 
     def test_certification_is_a_supported_candidate_category(self) -> None:
         self.assertIn("certification", candidate_validator.CATEGORIES)
+
+    def test_client_cannot_be_rendered_as_employer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, candidate_path, bundle_path, _ = fixture(root)
+            candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+            candidate["records"]["experience"] = [{
+                "id": "X001", "legal_employer": None, "contracting_party": "RWS Group",
+                "client": "Meta", "engagement_type": "freelancer", "official_title": "Data Annotator",
+                "normalized_role_family": "Data Operations", "dates": "2025",
+                "achievement_fact_ids": ["E001"], "evidence_ids": ["E001"],
+            }]
+            write_json(candidate_path, candidate)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["inputs"]["candidate_evidence_sha256"] = digest(candidate_path)
+            bundle["resume_sections"] = [{
+                "title": "Experience", "items": [{
+                    "type": "experience", "company": "Meta", "position": "Data Annotator",
+                    "location": None, "dates": "2025", "summary": None, "highlights": [],
+                    "evidence_ids": ["E001"],
+                }],
+            }]
+            write_json(bundle_path, bundle)
+            errors = bundle_validator.validate(
+                bundle, bundle_validator.load(SKILL_DIR / "references" / "bundle-template.json"), bundle_path,
+            )
+            self.assertTrue(any("client cannot be the company" in error for error in errors))
+
+    def test_education_must_copy_official_credential(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, candidate_path, bundle_path, _ = fixture(root)
+            candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+            candidate["records"]["education"] = [{
+                "id": "D001", "institution": "PUC-Rio",
+                "official_degree": "Postgraduate Specialization Certificate",
+                "field": "Software Engineering", "track": None, "status": "completed",
+                "credential_awarded": True, "dates": "2024", "evidence_ids": ["E001"],
+            }]
+            write_json(candidate_path, candidate)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["inputs"]["candidate_evidence_sha256"] = digest(candidate_path)
+            bundle["resume_sections"] = [{
+                "title": "Education", "items": [{
+                    "type": "education", "institution": "PUC-Rio", "area": "Software Engineering",
+                    "degree": "Master's", "location": None, "dates": "2024", "summary": None,
+                    "highlights": [], "evidence_ids": ["E001"],
+                }],
+            }]
+            write_json(bundle_path, bundle)
+            errors = bundle_validator.validate(
+                bundle, bundle_validator.load(SKILL_DIR / "references" / "bundle-template.json"), bundle_path,
+            )
+            self.assertTrue(any("official degree" in error for error in errors))
+
+    def test_every_typed_education_record_and_date_must_be_rendered(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, candidate_path, bundle_path, _ = fixture(root)
+            candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+            candidate["records"]["education"] = [{
+                "id": "D001", "institution": "FAETEC",
+                "official_degree": "Technical Informatics course (BAC+2)",
+                "field": "Informatics", "track": None, "status": "completed",
+                "credential_awarded": False, "dates": "2015 to 2017", "evidence_ids": ["E001"],
+            }]
+            write_json(candidate_path, candidate)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["inputs"]["candidate_evidence_sha256"] = digest(candidate_path)
+            bundle["resume_sections"] = [{"title": "Education", "items": [{
+                "type": "education", "institution": "FAETEC", "area": "Informatics",
+                "degree": "Technical Informatics course (BAC+2)", "location": None,
+                "dates": None, "summary": None, "highlights": [], "evidence_ids": ["E001"],
+            }]}]
+            errors = bundle_validator.validate(
+                bundle, bundle_validator.load(SKILL_DIR / "references" / "bundle-template.json"), bundle_path,
+            )
+            self.assertTrue(any("dates must preserve" in error for error in errors))
+
+            bundle["resume_sections"] = [{"title": "Skills", "items": [{
+                "type": "one_line", "label": "Focus", "details": "Systems", "evidence_ids": ["E001"],
+            }]}]
+            errors = bundle_validator.validate(
+                bundle, bundle_validator.load(SKILL_DIR / "references" / "bundle-template.json"), bundle_path,
+            )
+            self.assertTrue(any("every typed education record" in error for error in errors))
+
+    def test_supported_skill_evidence_requires_hard_and_soft_skill_sections(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, candidate_path, bundle_path, _ = fixture(root)
+            candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+            candidate["facts"][0].update({
+                "category": "skill",
+                "claim": "Python",
+            })
+            candidate["facts"].append({
+                "id": "E004", "category": "experience",
+                "claim": "Delivered sessions explaining data formats and quality.",
+                "source_path": str(root / "experience.md"), "page": None,
+                "source_fact_ids": ["MC-EXP-002"],
+            })
+            write_json(candidate_path, candidate)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["inputs"]["candidate_evidence_sha256"] = digest(candidate_path)
+            bundle["tailoring_strategy"]["selected_candidate_evidence_ids"].append("E004")
+            bundle["tailoring_strategy"]["claim_scores"].append({
+                "candidate_evidence_id": "E004", "relevance": 1, "evidence_strength": 3,
+                "specificity": 2, "recency": 2, "risk": 0, "redundancy": 0,
+                "total": 12, "job_evidence_keys": ["responsibilities.0"],
+            })
+            bundle["resume_sections"] = [{
+                "title": "Experience", "items": [{
+                    "type": "text", "text": "Delivered sessions.", "evidence_ids": ["E004"],
+                }],
+            }]
+            bundle["match_analysis"]["matched"][0]["candidate_evidence_ids"].append("E004")
+            errors = bundle_validator.validate(
+                bundle, bundle_validator.load(SKILL_DIR / "references" / "bundle-template.json"), bundle_path,
+            )
+            self.assertTrue(any("technical-skills section" in error for error in errors))
+            self.assertTrue(any("soft-skills section" in error for error in errors))
+
+    def test_claim_score_arithmetic_is_deterministic(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            _, _, bundle_path, _ = fixture(Path(temporary))
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["tailoring_strategy"]["claim_scores"][0]["total"] = 80
+            errors = bundle_validator.validate(
+                bundle, bundle_validator.load(SKILL_DIR / "references" / "bundle-template.json"), bundle_path,
+            )
+            self.assertTrue(any("scoring formula" in error for error in errors))
+
+    def test_freelancer_record_requires_explicit_contracting_party(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "experience.md"
+            source.write_text("- [MC-EXP-001] Freelance annotation work.\n", encoding="utf-8")
+            record = json.loads((SKILL_DIR / "references" / "candidate-evidence-template.json").read_text(encoding="utf-8"))
+            record.update({
+                "extraction_status": "complete",
+                "candidate": {
+                    "name": "Candidate", "headline": None, "location": None,
+                    "contact": ["candidate@example.test"], "languages": [],
+                },
+                "sources": [{"path": str(source), "sha256": digest(source), "pages": None}],
+                "facts": [{
+                    "id": "E001", "category": "experience", "claim": "Freelance annotation work.",
+                    "source_path": str(source), "page": None, "source_fact_ids": ["MC-EXP-001"],
+                }],
+                "records": {"experience": [{
+                    "id": "X001", "legal_employer": None, "contracting_party": None,
+                    "client": "Meta", "engagement_type": "freelancer", "official_title": "Annotator",
+                    "normalized_role_family": "Data Operations", "dates": None,
+                    "achievement_fact_ids": [], "evidence_ids": ["E001"],
+                }], "education": []},
+                "field_evidence": {"candidate.name": ["E001"], "candidate.contact.0": ["E001"]},
+                "missing_fields": [], "warnings": ["Contracting party is ambiguous."],
+                "extracted_at": "2026-08-20T12:00:00+00:00",
+            })
+            errors, _ = candidate_validator.validate(
+                record, candidate_validator.load_bytes(
+                    (SKILL_DIR / "references" / "candidate-evidence-template.json").read_bytes(),
+                    SKILL_DIR / "references" / "candidate-evidence-template.json",
+                ),
+            )
+            self.assertTrue(any("requires contracting_party" in error for error in errors))
 
 
 if __name__ == "__main__":

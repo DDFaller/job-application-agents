@@ -34,7 +34,7 @@ inferred from `Generated At` or used as a requeue fallback.
 
 ## Page content
 
-Keep sections named `Job Summary`, `Requirements`, `Match Analysis`, `Gaps`, and `Current Documents`. `Current Documents` contains the current résumé and letter PDFs plus `resume.tex`, `letter.tex`, and `preamble.tex`. Replace that section only after the schema-3 manifest hashes validate and semantic-review status is fresh. Read the Notion enhanced-Markdown resource before constructing content.
+Keep sections named `Job Summary`, `Requirements`, `Match Analysis`, `Gaps`, and `Current Documents`. `Current Documents` contains the current résumé and letter PDFs plus the editable LaTeX sources: `resume.tex`, `letter.tex`, and `preamble.tex` (and any required renderer utility). Attempt individual `.tex` uploads first; if Notion rejects that extension, attach a versioned ZIP containing the untouched files with their exact `.tex` names. Never complete synchronization with PDFs alone. Replace that section only after the schema-3 manifest hashes validate and semantic-review status is fresh. Read the Notion enhanced-Markdown resource before constructing content.
 
 ## Status rules
 

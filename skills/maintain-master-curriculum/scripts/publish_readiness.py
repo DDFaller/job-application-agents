@@ -60,7 +60,9 @@ def profile_markdown(evidence: dict[str, Any], source_dir: Path, report: dict[st
         for fact in grouped[category]:
             source = Path(fact["source_path"]).name
             lines.append(f"- `{fact['id']}` {fact['claim']} (source: `{source}`)")
-            lines.append(f"  - Quote: {fact['quote']}")
+            source_ids = fact.get("source_fact_ids", [])
+            if source_ids:
+                lines.append("  - Canonical facts: " + ", ".join(f"`{item}`" for item in source_ids))
         lines.append("")
     if evidence.get("missing_fields") or evidence.get("warnings"):
         lines.extend(["## Review gaps", ""])

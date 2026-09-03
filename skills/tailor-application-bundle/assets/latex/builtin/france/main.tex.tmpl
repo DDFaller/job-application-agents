@@ -1,0 +1,26 @@
+% Dynamic adaptation of the downloaded French main.tex.
+\documentclass{cv}
+
+\begin{document}
+\colorbox{leftColor}{%
+\noindent\adjustbox{padding=0.5cm 0.8cm 0.5cm 0.8cm,margin=0cm}{
+\begin{minipage}[t][25.7cm][t]{0.33\textwidth}
+
+\name{[[JAA:NAME]]}{[[JAA:PHOTO]]}
+\contact{[[JAA:CONTACT]]}
+\location{[[JAA:LOCATION]]}
+
+[[JAA:SIDEBAR_SECTIONS]]
+\end{minipage}}}%
+\colorbox{rightColor}{%
+\noindent\adjustbox{padding=0.5cm 0.8cm 0.5cm 0.8cm,margin=0cm}{
+\begin{minipage}[t][25.7cm][t]{0.55\textwidth}
+
+\jobTitle{[[JAA:HEADLINE]]}
+
+\section{Profile}
+[[JAA:PROFILE]]
+
+[[JAA:SECTIONS]]
+\end{minipage}}}
+\end{document}

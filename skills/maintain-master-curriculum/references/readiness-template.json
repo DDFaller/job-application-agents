@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "status": "ready",
   "source_version": null,
   "source_dir": null,
@@ -9,6 +9,14 @@
     "sha256": null,
     "validator_path": null,
     "validator_exit": null
+  },
+  "role_profiles": {
+    "status": "missing",
+    "state_root": null,
+    "resolver_path": null,
+    "resolver_exit": null,
+    "catalog_path": null,
+    "catalog_sha256": null
   },
   "hard_blockers": [],
   "quality_gaps": [],

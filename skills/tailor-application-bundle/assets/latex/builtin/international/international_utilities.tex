@@ -1,0 +1,28 @@
+% Dynamic helpers adapted from the downloaded international_utilities.tex.
+\newcommand{\resumeHeader}[4]{%
+  \begin{center}
+    {\Huge\scshape #1}\\[-1pt]
+    \if\relax\detokenize{#2}\relax\else{\large #2}\\[-1pt]\fi
+    \small
+    \if\relax\detokenize{#3}\relax\else\faMapMarker*\ #3\fi
+    \if\relax\detokenize{#4}\relax\else
+      \if\relax\detokenize{#3}\relax\else\quad\fi #4
+    \fi
+  \end{center}\vspace{-10pt}
+}
+
+\newcommand{\resumeSubheading}[4]{%
+  \noindent\begin{tabular*}{\textwidth}[t]{l@{\extracolsep{\fill}}r}
+    \textbf{#1} & \textbf{\small #2}\\
+    \textit{\small #3} & \textit{\small #4}
+  \end{tabular*}\vspace{-2pt}
+}
+\newcommand{\resumeProjectHeading}[2]{%
+  \noindent\begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+    \small\textbf{#1} & \textbf{\small #2}
+  \end{tabular*}\vspace{-2pt}
+}
+\newcommand{\resumeDescription}[1]{\noindent\small #1\par\vspace{1pt}}
+\newenvironment{resumeItems}{\begin{itemize}}{\end{itemize}\vspace{-3pt}}
+\newcommand{\resumeOneLine}[2]{\noindent\textbf{#1:} #2\par}
+\newcommand{\resumeText}[1]{\noindent #1\par}

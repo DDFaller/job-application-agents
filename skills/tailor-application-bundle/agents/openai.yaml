@@ -1,4 +1,4 @@
 interface:
   display_name: "Tailor Application Bundle"
-  short_description: "Create reviewed, editable LaTeX applications"
-  default_prompt: "Use $tailor-application-bundle to create or rebuild an evidence-backed application with editable XeLaTeX sources and independently reviewed PDFs."
+  short_description: "Tailor from approved evidence-backed profiles"
+  default_prompt: "Use $tailor-application-bundle to select an approved role profile, create or rebuild an evidence-backed geographic XeLaTeX application, and pause with a profile proposal when none fits."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Humanize Application Copy"
+  short_description: "Humanize CV profiles and motivation letters"
+  default_prompt: "Use $humanize-application-copy after drafting an application to humanize only the CV profile summary and motivation-letter paragraphs, preserving all evidence and structured data."

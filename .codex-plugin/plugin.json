@@ -28,6 +28,8 @@
     "defaultPrompt": [
       "Prepare this job application.",
       "Process my application queue.",
+      "Rank my job shortlist.",
+      "Prepare me for an interview.",
       "Update this application in Notion."
     ]
   }

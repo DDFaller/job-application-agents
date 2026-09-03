@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused unit tests for the deterministic RenderCV adapter."""
+"""Focused unit tests for deterministic geographic LaTeX rendering."""
 
 from __future__ import annotations
 
@@ -7,7 +7,9 @@ import importlib.util
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -19,118 +21,67 @@ render_bundle = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(render_bundle)
 
 
+def latex_runtime_ready() -> bool:
+    try:
+        render_bundle.preflight_rendering(Path(__file__).resolve().parent.parent)
+        return True
+    except RuntimeError:
+        return False
+
+
 class RenderBundleTests(unittest.TestCase):
-    def test_contacts_are_classified(self) -> None:
-        result = render_bundle.contacts([
-            "person@example.com", "+33 7 12 34 56 78",
-            "https://github.com/person", "https://linkedin.com/in/person",
-            "https://example.com/portfolio",
-        ])
-        self.assertEqual(result["email"], ["person@example.com"])
-        self.assertEqual(result["custom_connections"], [{
-            "fontawesome_icon": "phone",
-            "placeholder": "+33 7 12 34 56 78",
-            "url": None,
-        }])
-        self.assertEqual(result["website"], ["https://example.com/portfolio"])
-        self.assertEqual(result["social_networks"], [
-            {"network": "GitHub", "username": "person"},
-            {"network": "LinkedIn", "username": "person"},
-        ])
-
-    def test_all_entry_types_convert(self) -> None:
-        cases = [
-            ({"type": "experience", "company": "C", "position": "P", "location": None, "dates": "2026", "summary": None, "highlights": [], "evidence_ids": ["E1"]}, "company"),
-            ({"type": "education", "institution": "I", "area": "A", "degree": "D", "location": None, "dates": "2025", "summary": None, "highlights": [], "evidence_ids": ["E1"]}, "institution"),
-            ({"type": "normal", "name": "N", "location": None, "dates": None, "summary": None, "highlights": [], "evidence_ids": ["E1"]}, "name"),
-            ({"type": "one_line", "label": "L", "details": "D", "evidence_ids": ["E1"]}, "label"),
-            ({"type": "publication", "title": "T", "authors": ["A"], "journal": None, "dates": None, "doi": None, "url": None, "summary": None, "evidence_ids": ["E1"]}, "title"),
-            ({"type": "bullet", "text": "B", "evidence_ids": ["E1"]}, "bullet"),
-            ({"type": "numbered", "text": "N", "evidence_ids": ["E1"]}, "number"),
-            ({"type": "reversed_numbered", "text": "R", "evidence_ids": ["E1"]}, "reversed_number"),
-            ({"type": "text", "text": "T", "evidence_ids": ["E1"]}, "text"),
-        ]
-        for item, expected_key in cases:
-            with self.subTest(item["type"]):
-                self.assertIn(expected_key, render_bundle.rendercv_entry(item))
-
-    def test_locale_falls_back_to_english(self) -> None:
-        self.assertEqual(render_bundle.job_locale({"inputs": {"job_json": "/missing"}}), "english")
-
-    def test_international_profile_preserves_sb2nov(self) -> None:
+    @unittest.skipUnless(latex_runtime_ready(), "complete XeLaTeX/Poppler runtime unavailable")
+    def test_international_template_preserves_real_pdf_reading_order(self) -> None:
+        skill = Path(__file__).resolve().parent.parent
         bundle = {
-            "inputs": {"job_json": "/missing"},
-            "candidate": {"name": "A", "headline": "B", "location": None, "contact": [], "summary": {"text": "C"}},
-            "resume_sections": [{"title": "Skills", "items": [{"type": "one_line", "label": "Languages", "details": "Python", "evidence_ids": ["E1"]}]}],
+            "candidate": {
+                "name": "Ada Example", "headline": "Backend Engineer", "location": "Paris",
+                "contact": ["ada@example.test"], "summary": {"text": "Builds observable data pipelines."},
+            },
+            "resume_sections": [{
+                "title": "Experience", "items": [{
+                    "type": "experience", "company": "Example GmbH", "position": "Backend Intern",
+                    "location": "Paris", "dates": "2026", "summary": None,
+                    "highlights": [{"text": "Built a Python pipeline."}], "evidence_ids": ["E001"],
+                }],
+            }],
         }
-        document = render_bundle.rendercv_document(bundle)
-        self.assertEqual(document["design"], {"theme": "sb2nov", "page": {"size": "us-letter"}})
-        rendered = "\n".join(render_bundle.yaml_dump(document))
-        self.assertIn('theme: "sb2nov"', rendered)
-        self.assertIn('size: "us-letter"', rendered)
-        self.assertEqual(render_bundle.profile_design("international", False)[1], 1)
-
-    def test_render_resume_does_not_generate_png(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            out_dir = Path(temporary)
-            yaml_path = out_dir / "resume.yaml"
-            yaml_path.write_text("resume", encoding="utf-8")
-            (out_dir / "resume.pdf").write_bytes(b"pdf")
-            calls = []
+            out = Path(temporary)
+            template = render_bundle.builtin_template(skill, "international")
+            render_bundle.copy_custom_template(template, out)
+            tex = render_bundle.latex_cv_document(bundle, "international", None, {}, skill)
+            (out / "resume.tex").write_text(tex, encoding="utf-8")
+            quality = render_bundle.render_resume_latex(out / "resume.tex", out, 1)
+            render_bundle.verify_resume_reading_order(
+                bundle, out / "resume.pdf", "international"
+            )
+            self.assertEqual(quality["pages"], 1)
 
-            def run(command, **kwargs):
-                calls.append(command)
-                if command[0] == "pdfinfo":
-                    return mock.Mock(returncode=0, stdout="Pages:           1\n", stderr="")
-                if command[0] == "pdftotext":
-                    return mock.Mock(returncode=0, stdout="Candidate", stderr="")
-                return mock.Mock(returncode=0, stdout="", stderr="")
+    def test_geographic_template_metadata(self) -> None:
+        skill = Path(__file__).resolve().parent.parent
+        international = render_bundle.builtin_template(skill, "international")
+        france = render_bundle.builtin_template(skill, "france")
+        self.assertEqual(json.loads((international / "template.json").read_text())["id"], "international")
+        self.assertTrue((france / "cv.cls").is_file())
+        international_design, _ = render_bundle.profile_design("international", False)
+        self.assertEqual(international_design["page"]["size"], "us-letter")
+        france_design, pages = render_bundle.profile_design("france", True)
+        self.assertEqual(france_design["page"]["size"], "a4")
+        self.assertEqual(france_design["layout"]["columns"], 2)
+        self.assertEqual(pages, 1)
 
-            with mock.patch.object(render_bundle.subprocess, "run", side_effect=run), mock.patch.object(render_bundle.shutil, "which", side_effect=lambda name: name):
-                render_bundle.render_resume(Path("rendercv"), yaml_path, out_dir, 1)
-
-            render_command = calls[0]
-            self.assertIn("--dont-generate-png", render_command)
-            self.assertNotIn("--png-path", render_command)
-            self.assertNotIn("resume.png", render_command)
-
-    def test_render_resume_bounds_child_processes(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            out_dir = Path(temporary)
-            yaml_path = out_dir / "resume.yaml"
-            yaml_path.write_text("resume", encoding="utf-8")
-            (out_dir / "resume.pdf").write_bytes(b"pdf")
-            calls = []
-
-            def run(command, **kwargs):
-                calls.append((command, kwargs))
-                if command[0] == "pdfinfo":
-                    return mock.Mock(returncode=0, stdout="Pages:           1\n", stderr="")
-                if command[0] == "pdftotext":
-                    return mock.Mock(returncode=0, stdout="Candidate", stderr="")
-                return mock.Mock(returncode=0, stdout="", stderr="")
-
-            with mock.patch.object(render_bundle.subprocess, "run", side_effect=run), mock.patch.object(render_bundle.shutil, "which", side_effect=lambda name: name):
-                render_bundle.render_resume(Path("rendercv"), yaml_path, out_dir, 1)
-
-            self.assertTrue(all(kwargs.get("timeout") == render_bundle.SUBPROCESS_TIMEOUT_SECONDS for _, kwargs in calls))
-
-    def test_rendercv_document_disables_png_generation(self) -> None:
-        bundle = {
-            "inputs": {"job_json": "/missing"},
-            "candidate": {"name": "A", "headline": "B", "location": None, "contact": [], "summary": {"text": "C"}},
-            "resume_sections": [],
-        }
-        self.assertTrue(render_bundle.rendercv_document(bundle)["settings"]["render_command"]["dont_generate_png"])
-
-    def test_preflight_checks_all_rendering_tools(self) -> None:
-        with mock.patch.object(render_bundle, "rendercv_binary", return_value=Path("rendercv")) as rendercv, mock.patch.object(render_bundle.shutil, "which", side_effect=lambda name: name):
-            render_bundle.preflight_rendering(Path("skill"), "rendercv")
-        rendercv.assert_called_once_with(Path("skill"))
-
-    def test_latex_is_default_and_uses_profile_paper(self) -> None:
-        with mock.patch.object(render_bundle.shutil, "which", side_effect=lambda name: name):
+    def test_preflight_checks_both_builtin_templates(self) -> None:
+        with mock.patch.object(render_bundle.shutil, "which", side_effect=lambda name: name), \
+                mock.patch.object(render_bundle.subprocess, "run", return_value=SimpleNamespace(stdout="/tex/fontawesome5.sty\n")), \
+                mock.patch.object(render_bundle, "builtin_template", return_value=Path("template")) as builtin:
             render_bundle.preflight_rendering(Path("skill"))
+        self.assertEqual(
+            builtin.call_args_list,
+            [mock.call(Path("skill"), "international"), mock.call(Path("skill"), "france")],
+        )
+
+    def test_latex_profile_paper_and_escape(self) -> None:
         skill = Path(__file__).resolve().parent.parent
         self.assertIn("letterpaper", render_bundle.latex_preamble_for_profile(skill, "international"))
         self.assertIn("a4paper", render_bundle.latex_preamble_for_profile(skill, "france"))
@@ -139,18 +90,122 @@ class RenderBundleTests(unittest.TestCase):
             r"A\&B\_\textasciitilde{}\textasciicircum{}\textbackslash{}",
         )
 
-    def test_france_profile_uses_a4_and_photo(self) -> None:
+    def test_contact_urls_are_not_double_prefixed(self) -> None:
+        skill = Path(__file__).resolve().parent.parent
         bundle = {
-            "inputs": {"job_json": "/missing"},
-            "candidate": {"name": "A", "headline": "B", "location": "Paris", "contact": [], "summary": {"text": "C"}},
+            "candidate": {
+                "name": "Ada Example", "headline": "Backend Engineer", "location": "Paris",
+                "contact": ["ada@example.test", "https://github.com/ada", "https://example.test"],
+                "summary": {"text": "Builds observable data pipelines."},
+            },
             "resume_sections": [],
         }
-        document = render_bundle.rendercv_document(bundle, "france", "profile-photo.jpg")
-        self.assertEqual(document["cv"]["photo"], "profile-photo.jpg")
-        self.assertEqual(document["design"]["theme"], "classic")
-        self.assertEqual(document["design"]["page"]["size"], "a4")
-        self.assertEqual(document["design"]["header"]["photo_position"], "left")
-        self.assertEqual(render_bundle.profile_design("france", True)[1], 1)
+        tex = render_bundle.latex_cv_document(bundle, "france", None, {}, skill)
+        self.assertIn(r"\href{https://github.com/ada}{\faGithub}", tex)
+        self.assertIn(r"\href{https://example.test}{\faGlobe}", tex)
+        self.assertNotIn("https://https://", tex)
+
+    def test_custom_preflight_skips_builtin_templates(self) -> None:
+        with mock.patch.object(render_bundle.shutil, "which", side_effect=lambda name: name), \
+                mock.patch.object(render_bundle, "builtin_template") as builtin:
+            render_bundle.preflight_rendering(Path("skill"), builtin_latex=False)
+        builtin.assert_not_called()
+
+    def test_local_render_mode_uses_bounded_compiler_without_firestore(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source"
+            output = Path(temporary) / "output"
+            source.mkdir()
+            (source / "resume.tex").write_text("resume", encoding="utf-8")
+            (source / "letter.tex").write_text("letter", encoding="utf-8")
+            expected = {"status": "SUCCEEDED", "documents": {}}
+            with mock.patch.object(
+                render_bundle, "load_render_config",
+                return_value=SimpleNamespace(mode="local"),
+            ), mock.patch.object(
+                render_bundle, "compile_request", return_value=expected,
+            ) as compiler:
+                result = render_bundle.compile_with_render_service(source, output)
+            self.assertIs(result, expected)
+            compiler.assert_called_once()
+            self.assertEqual(compiler.call_args.args[1], source)
+            self.assertEqual(compiler.call_args.args[2], output)
+
+
+    def test_custom_template_snapshot_copies_only_runtime_files_to_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            source = base / "source"
+            stage = base / "stage"
+            source.mkdir()
+            stage.mkdir()
+            (source / "template.json").write_text(json.dumps({
+                "main": "main.tmpl", "fragments": {"section": "fragment.tmpl"},
+            }), encoding="utf-8")
+            (source / "main.tmpl").write_text("main", encoding="utf-8")
+            (source / "fragment.tmpl").write_text("fragment", encoding="utf-8")
+            (source / "local.sty").write_text("runtime", encoding="utf-8")
+
+            names = render_bundle.copy_custom_template(source, stage)
+
+            self.assertEqual(names, ["local.sty"])
+            self.assertTrue((stage / "local.sty").is_file())
+            self.assertTrue((stage / "template-source" / "main.tmpl").is_file())
+            self.assertFalse((stage / "main.tmpl").exists())
+
+    def test_custom_template_rejects_explicit_geographic_profile(self) -> None:
+        args = SimpleNamespace(
+            bundle_json=Path("bundle.json"), application_root=Path("application"),
+            template="custom-template", profile="france",
+            photo=None,
+        )
+        inputs = ({}, b"{}", b"{}", b"{}", b"{}")
+        with mock.patch.object(render_bundle, "verify_bundle_for_render", return_value=inputs):
+            with self.assertRaisesRegex(ValueError, "omit --profile"):
+                render_bundle.stage_bundle(args, Path("skill"))
+
+    def test_reading_order_gate_uses_bundle_sequence(self) -> None:
+        bundle = {
+            "candidate": {"name": "Ada Example", "headline": "Backend Engineer", "summary": {"text": "Builds APIs."}},
+            "resume_sections": [{
+                "title": "Experience",
+                "items": [{
+                    "type": "experience", "company": "Example GmbH",
+                    "highlights": [{"text": "Operated pipelines."}],
+                }],
+            }],
+        }
+        ordered = "Ada Example Backend Engineer Builds APIs Experience Example GmbH Operated pipelines"
+        with mock.patch.object(render_bundle, "normalized_pdf_text", return_value=ordered):
+            render_bundle.verify_resume_reading_order(bundle, Path("resume.pdf"))
+        reordered = "Ada Example Backend Engineer Builds APIs Example GmbH Experience Operated pipelines"
+        with mock.patch.object(render_bundle, "normalized_pdf_text", return_value=reordered):
+            with self.assertRaisesRegex(RuntimeError, "reading order"):
+                render_bundle.verify_resume_reading_order(bundle, Path("resume.pdf"))
+
+    def test_france_reading_order_routes_one_line_sections_to_sidebar(self) -> None:
+        bundle = {
+            "candidate": {"name": "Ada", "headline": "Engineer", "summary": {"text": "Profile"}},
+            "resume_sections": [
+                {"title": "Experience", "items": [{"type": "experience", "company": "Company", "highlights": []}]},
+                {"title": "Skills", "items": [{"type": "one_line", "label": "Languages", "details": "Python"}]},
+            ],
+        }
+        self.assertEqual(
+            render_bundle.resume_order_anchors(bundle, "france"),
+            ["ada", "engineer", "profile", "skills", "languages", "experience", "company"],
+        )
+
+    def test_france_stage_requires_approved_photo(self) -> None:
+        args = SimpleNamespace(
+            bundle_json=Path("bundle.json"), application_root=Path("application"),
+            template="builtin", profile="france", photo=None,
+        )
+        inputs = ({}, b"{}", b'{"location":"Paris"}', b"{}", b"{}")
+        with mock.patch.object(render_bundle, "verify_bundle_for_render", return_value=inputs), \
+                mock.patch.object(render_bundle, "discover_approved_photo", return_value=None):
+            with self.assertRaisesRegex(ValueError, "requires an approved photo"):
+                render_bundle.stage_bundle(args, Path("skill"))
 
     def test_auto_profile_detects_france_from_bundle_location(self) -> None:
         bundle = {"inputs": {"job_json": "/missing"}, "job": {"location": "Paris, Île-de-France"}}
@@ -165,21 +220,25 @@ class RenderBundleTests(unittest.TestCase):
             stage.mkdir(parents=True)
             job = root / "job.json"
             evidence = root / "candidate.json"
+            profiles = root / "profiles.json"
             bundle_path = root / "bundle.json"
             review_path = root / "review.json"
             job.write_text(json.dumps({"field_evidence": {}}), encoding="utf-8")
             evidence.write_text(json.dumps({"facts": []}), encoding="utf-8")
+            profiles.write_text(json.dumps({"profiles": []}), encoding="utf-8")
             job_hash = hashlib.sha256(job.read_bytes()).hexdigest()
             evidence_hash = hashlib.sha256(evidence.read_bytes()).hexdigest()
+            profiles_hash = hashlib.sha256(profiles.read_bytes()).hexdigest()
             bundle = {
                 "inputs": {
                     "job_json": str(job), "job_sha256": job_hash,
                     "candidate_evidence_json": str(evidence), "candidate_evidence_sha256": evidence_hash,
+                    "role_profiles_json": str(profiles), "role_profiles_sha256": profiles_hash,
                 },
             }
             bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
             (stage / "bundle.json").write_bytes(bundle_path.read_bytes())
-            for name in ("job.json", "candidate-evidence.json", "resume.pdf", "motivation-letter.pdf"):
+            for name in ("job.json", "candidate-evidence.json", "role-profiles.json", "resume.pdf", "motivation-letter.pdf"):
                 (stage / name).write_text(name, encoding="utf-8")
             artifacts = {
                 path.name: {"sha256": render_bundle.sha256(path), "bytes": path.stat().st_size}
@@ -201,6 +260,7 @@ class RenderBundleTests(unittest.TestCase):
                 "inputs": {
                     "job_json": str(job), "job_sha256": job_hash,
                     "candidate_evidence_json": str(evidence), "candidate_evidence_sha256": evidence_hash,
+                    "role_profiles_json": str(profiles), "role_profiles_sha256": profiles_hash,
                     "bundle_json": str(bundle_path), "bundle_sha256": hashlib.sha256(bundle_path.read_bytes()).hexdigest(),
                 },
                 "checks": {key: True for key in template["checks"]},
@@ -244,17 +304,21 @@ class RenderBundleTests(unittest.TestCase):
                 "manifest": str((version / "manifest.json").resolve()),
             })
 
-            def resume(_tex, out, _pages):
+            def compile_service(_source, out, **_options):
                 (out / "resume.pdf").write_bytes(b"new resume")
-                return {"pages": 1, "text_chars": 10}
-
-            def letter(_tex, out):
                 (out / "motivation-letter.pdf").write_bytes(b"new letter")
-                return {"pages": 1, "text_chars": 10}
+                return {"documents": {
+                    "resume.pdf": {
+                        "pages": 1, "text_chars": 10, "normalized_text_sha256": "new",
+                    },
+                    "motivation-letter.pdf": {
+                        "pages": 1, "text_chars": 10, "normalized_text_sha256": "new",
+                    },
+                }}
 
-            with mock.patch.object(render_bundle, "render_resume_latex", side_effect=resume), \
-                 mock.patch.object(render_bundle, "to_letter_pdf_latex", side_effect=letter), \
-                 mock.patch.object(render_bundle, "document_text_hashes", return_value={"resume.pdf": "new", "motivation-letter.pdf": "new"}):
+            with mock.patch.object(
+                render_bundle, "compile_with_render_service", side_effect=compile_service
+            ):
                 render_bundle.rebuild_current_version(version, Path("skill"))
 
             manifest = json.loads((version / "manifest.json").read_text(encoding="utf-8"))

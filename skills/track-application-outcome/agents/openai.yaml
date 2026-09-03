@@ -1,0 +1,4 @@
+interface:
+  display_name: "Track Application Outcome"
+  short_description: "Record stages, results, and follow-ups"
+  default_prompt: "Use $track-application-outcome to record what happened with this application."

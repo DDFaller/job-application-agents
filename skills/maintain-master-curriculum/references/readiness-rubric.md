@@ -24,6 +24,11 @@ Report these as non-blocking when the evidence remains technically usable:
 - Certifications omit issuer, date, identifier, or verification link.
 - Claims are too broad, compound, vague, or unsupported by measurable detail the user may be able to provide.
 - Chronology has unexplained overlaps or gaps worth confirming.
+- Independent work does not explicitly distinguish contracting party and client.
+- Education does not explicitly state official degree/certificate, field,
+  completion status, or whether the credential was awarded.
+- The approved role-profile catalog is missing or bound to an older source
+  manifest. This blocks application positioning, but not factual maintenance.
 
 For every gap, ask one focused question whose answer could produce a canonical fact. Do not treat an absent job-specific qualification as a blocker; the bundle writer must disclose it in match analysis.
 

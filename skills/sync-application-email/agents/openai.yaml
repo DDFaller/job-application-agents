@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sync Application Email"
+  short_description: "Propose source-cited email status updates"
+  default_prompt: "Use $sync-application-email to scan my connected email for application updates."

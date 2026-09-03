@@ -6,7 +6,9 @@
     "job_json": "",
     "job_sha256": "",
     "candidate_evidence_json": "",
-    "candidate_evidence_sha256": ""
+    "candidate_evidence_sha256": "",
+    "role_profiles_json": "",
+    "role_profiles_sha256": ""
   },
   "document_text_sha256": {
     "resume.pdf": "",
@@ -17,7 +19,10 @@
     "job_alignment_preserved": false,
     "candidate_identity_preserved": false,
     "unsupported_claims_absent": false,
-    "documents_coherent": false
+    "documents_coherent": false,
+    "selected_profile_preserved": false,
+    "employment_and_education_clear": false,
+    "language_and_ats_order_clear": false
   },
   "findings": [],
   "verdict": "revise",
