@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   test:
@@ -35,7 +36,7 @@ jobs:
           mkdir -p "$JAA_ARTIFACT_ROOT"
           export JAA_HOST_UID="$(id -u)"
           export JAA_HOST_GID="$(id -g)"
-          docker compose up -d --build --wait
+          docker compose -f deploy/compose.yaml up -d --build --wait
 
       - name: Run Firestore repository tests
         run: python -m unittest job_application_agents.render_service.test_firestore -v
@@ -45,7 +46,7 @@ jobs:
 
       - name: Capture service logs on failure
         if: failure()
-        run: docker compose logs --no-color > "$RUNNER_TEMP/render-service.log"
+        run: docker compose -f deploy/compose.yaml logs --no-color > "$RUNNER_TEMP/render-service.log"
 
       - name: Upload failure diagnostics
         if: failure()
@@ -58,4 +59,4 @@ jobs:
 
       - name: Stop render services
         if: always()
-        run: docker compose down -v
+        run: docker compose -f deploy/compose.yaml down -v
