@@ -73,6 +73,7 @@ class RenderBundleTests(unittest.TestCase):
 
     def test_preflight_checks_both_builtin_templates(self) -> None:
         with mock.patch.object(render_bundle.shutil, "which", side_effect=lambda name: name), \
+                mock.patch.object(render_bundle.subprocess, "run", return_value=SimpleNamespace(stdout="/tex/fontawesome5.sty\n")), \
                 mock.patch.object(render_bundle, "builtin_template", return_value=Path("template")) as builtin:
             render_bundle.preflight_rendering(Path("skill"))
         self.assertEqual(
