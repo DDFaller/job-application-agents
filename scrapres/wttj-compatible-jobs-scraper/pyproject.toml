@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wttj-compatible-jobs-scraper"
+version = "0.1.0"
+description = "Scraper Playwright de vagas Welcome to the Jungle com filtro local baseado em evidências."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "playwright>=1.52,<2",
+]
+
+[project.scripts]
+wttj-scrape = "wttj_scraper.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

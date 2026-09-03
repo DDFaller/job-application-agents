@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tailor Application Bundle"
+  short_description: "Create reviewed, editable LaTeX applications"
+  default_prompt: "Use $tailor-application-bundle to create or rebuild an evidence-backed application with editable XeLaTeX sources and independently reviewed PDFs."

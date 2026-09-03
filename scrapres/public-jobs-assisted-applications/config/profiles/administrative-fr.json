@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "id": "administrative-fr",
+  "display_name": "Administração pública — França",
+  "profile_version": "public-v3",
+  "career_profile_current": "",
+  "top_count": 20,
+  "minimum_notion_score": 78,
+  "preliminary_threshold": 18,
+  "france_travail": {
+    "keywords": ["assistant administratif", "agent administratif", "gestionnaire administratif"],
+    "departments": []
+  },
+  "excluded_terms": [
+    "apprenti",
+    "apprentissage",
+    "stage étudiant",
+    "stage etudiant",
+    "stagiaire",
+    "internship"
+  ],
+  "blocked_title_terms": [
+    "directeur",
+    "directrice",
+    "chef de service",
+    "responsable de service",
+    "responsable du pôle",
+    "médiathécaire",
+    "ludothécaire",
+    "bibliothécaire",
+    "animateur",
+    "animatrice",
+    "manutentionnaire",
+    "psychologue",
+    "médecin",
+    "infirm",
+    "juriste",
+    "architecte",
+    "ingénieur",
+    "puéricul",
+    "travailleur social"
+  ],
+  "preliminary_title_rules": [
+    { "source": "title", "terms": ["assistant administratif", "assistante administrative"], "points": 42 },
+    { "source": "title", "terms": ["agent administratif", "gestionnaire administratif"], "points": 40 },
+    { "source": "title", "terms": ["gestion administrative", "assistant de gestion"], "points": 35 },
+    { "source": "title", "terms": ["gestionnaire de dossiers"], "points": 34 },
+    { "source": "title", "terms": ["secrétaire"], "points": 32 },
+    { "source": "title", "terms": ["assistant de direction"], "points": 30 },
+    { "source": "title", "terms": ["scolarité"], "points": 26 },
+    { "source": "title", "terms": ["état civil"], "points": 25 },
+    { "source": "title", "terms": ["accueil"], "points": 24 },
+    { "source": "title", "terms": ["affaires générales", "accès aux droits"], "points": 23 },
+    { "source": "title", "terms": ["courrier", "support informatique"], "points": 22 },
+    { "source": "title", "terms": ["archives"], "points": 21 },
+    { "source": "title", "terms": ["régie"], "points": 20 },
+    { "source": "title", "terms": ["technicien informatique"], "points": 19 },
+    { "source": "title", "terms": ["commission"], "points": 18 },
+    { "source": "title", "terms": ["numérique"], "points": 14 },
+    { "source": "title", "terms": ["applications"], "points": 13 }
+  ],
+  "preliminary_bonus_rules": [
+    { "source": "title", "terms": ["administratif"], "points": 12, "reason": "caráter administrativo explícito" },
+    { "source": "combined", "terms": ["dossier", "document", "accueil", "secrétariat", "courrier"], "points": 5, "reason": "missões administrativas identificadas" },
+    { "source": "combined", "terms": ["catégorie c", "categorie c", "catégorie : c"], "points": 10, "reason": "categoria C" },
+    { "source": "combined", "terms": ["catégorie b", "categorie b", "catégorie : b"], "points": 5, "reason": "categoria B" },
+    { "source": "combined", "terms": ["emploi permanent", "ouvert aux contractuels"], "points": 5, "reason": "vínculo acessível" }
+  ],
+  "direct_match_rules": [
+    { "source": "title", "terms": ["assistant administratif", "assistante administrative", "agent administratif", "gestionnaire administratif"], "points": 10, "reason": "intitulé diretamente administrativo", "evidence_key": "target_title", "exclusive_group": "title" },
+    { "source": "title", "terms": ["assistant de gestion", "secrétaire", "assistant de direction", "gestionnaire"], "points": 7, "reason": "intitulé administrativo próximo", "evidence_key": "target_title", "exclusive_group": "title" },
+    { "source": "all", "terms": ["accueil physique", "accueil téléphonique", "accueil du public", "accueil des usagers", "accueillir", "orienter les usagers", "orienter et informer", "renseigner les usagers", "répondre aux appels"], "points": 8, "reason": "acolhimento e orientação de usuários", "evidence_key": "reception" },
+    { "source": "all", "terms": ["gestion des dossiers", "gérer les dossiers", "suivi des dossiers", "suivre les dossiers", "suivi administratif", "suivi contractuel", "traçabilité des dossiers", "dossiers administratifs", "instruction des dossiers", "mise à jour des dossiers", "tenue des dossiers"], "points": 9, "reason": "gestão e acompanhamento de processos", "evidence_key": "files" },
+    { "source": "all", "terms": ["pièces justificatives", "vérification des pièces", "contrôle des pièces", "complétude", "dossiers incomplets"], "points": 5, "reason": "controle de documentos e completude", "evidence_key": "documents" },
+    { "source": "all", "terms": ["saisie", "mise à jour", "base de données", "logiciel métier", "enregistrement des données"], "points": 5, "reason": "entrada e confiabilidade de dados", "evidence_key": "data" },
+    { "source": "all", "terms": ["rédaction", "rédiger", "courrier", "courriels", "mails", "attestation", "certificat"], "points": 6, "reason": "redação e gestão de comunicações", "evidence_key": "writing" },
+    { "source": "all", "terms": ["classement", "archivage", "numérisation", "dématérialisation"], "points": 5, "reason": "classificação, arquivo ou digitalização", "evidence_key": "archives" },
+    { "source": "all", "terms": ["excel", "tableau de suivi", "tableaux de suivi", "reporting", "indicateurs"], "points": 5, "reason": "planilhas e indicadores", "evidence_key": "spreadsheets" },
+    { "source": "all", "terms": ["agenda", "réunion", "rendez-vous", "planning"], "points": 4, "reason": "organização de agendas ou reuniões", "evidence_key": "organization" },
+    { "source": "all", "terms": ["coordination", "interface", "travail en équipe", "partenaires", "services municipaux"], "points": 4, "reason": "coordenação com serviços e parceiros", "evidence_key": "teamwork" },
+    { "source": "all", "terms": ["confidentialité", "discrétion", "respect des procédures", "rigueur", "priorités", "organisé", "organisée", "respect des délais"], "points": 3, "reason": "rigor, confidencialidade e priorização", "evidence_key": "rigor" },
+    { "source": "all", "terms": ["support utilisateurs", "assistance utilisateurs", "administration fonctionnelle", "outil numérique", "applications métiers"], "points": 7, "reason": "ponte entre administração e ferramentas digitais", "evidence_key": "digital" },
+    { "source": "all", "terms": ["react", "typescript", "firebase", "next.js"], "points": 4, "reason": "tecnologias presentes no perfil", "evidence_key": "technologies" }
+  ],
+  "gap_rules": [
+    { "source": "requirements", "pattern": "(?:niveau|ma[iî]trise).{0,20}excel.{0,20}(?:expert|avanc[ée])|excel.{0,20}(?:expert|avanc[ée]).{0,20}(?:exig[ée]|imp[ée]ratif)", "flags": "i", "label": "nível avançado de Excel a verificar" },
+    { "source": "requirements", "pattern": "dipl[oô]me.{0,35}(?:assistan|secr[ée]tariat|gestion administrative)", "flags": "i", "label": "diploma administrativo específico a verificar" },
+    { "source": "requirements", "pattern": "comptabilit(?![ée]\\s+publique)[ée]|logiciels? comptables?|codifier une facture", "flags": "i", "label": "competência contábil a verificar" },
+    { "source": "requirements", "pattern": "(?:connaissance|maîtrise|maitrise|notions?).{0,45}comptabilité publique", "flags": "i", "label": "contabilidade pública a verificar" },
+    { "source": "requirements", "pattern": "(?:connaissance|maîtrise|maitrise|notions?).{0,45}marchés publics", "flags": "i", "label": "compras públicas a verificar" },
+    { "source": "requirements", "pattern": "(?:connaissance|maîtrise|maitrise|expérience|formation).{0,45}\\bpaie\\b|gestion de la paie", "flags": "i", "label": "experiência em folha de pagamento a verificar" },
+    { "source": "requirements", "pattern": "formation juridique|connaissances? juridiques|droit public|droit administratif", "flags": "i", "label": "formação jurídica a verificar" },
+    { "source": "requirements", "pattern": "(?:connaissance|maîtrise|maitrise|notions?).{0,45}urbanisme", "flags": "i", "label": "conhecimento de urbanismo a verificar" },
+    { "source": "requirements", "pattern": "terminologie médicale|nomenclature des actes médicaux|facturation des actes", "flags": "i", "label": "administração médico-social especializada a verificar" }
+  ],
+  "sector_signals": {
+    "technology_terms": ["informatique", "numérique", "application métier", "applications métiers", "outil numérique", "système d'information", "support utilisateurs"],
+    "technology_career_bonus": 3
+  },
+  "career_bonus_terms": ["formation interne", "parcours de formation", "possibilité d'évolution", "perspectives d'évolution", "poste polyvalent", "transversal", "dématérialisation", "modernisation"],
+  "practical_locations": {
+    "excellent": [],
+    "strong": [],
+    "acceptable": []
+  },
+  "evidence": {
+    "target_title": [],
+    "reception": [],
+    "files": [],
+    "documents": [],
+    "data": [],
+    "writing": [],
+    "archives": [],
+    "spreadsheets": [],
+    "organization": [],
+    "teamwork": [],
+    "rigor": [],
+    "digital": [],
+    "technologies": []
+  }
+}

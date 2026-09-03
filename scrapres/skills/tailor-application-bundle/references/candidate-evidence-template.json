@@ -1,0 +1,17 @@
+{
+  "schema_version": 2,
+  "extraction_status": "complete",
+  "candidate": {
+    "name": null,
+    "headline": null,
+    "location": null,
+    "contact": [],
+    "languages": []
+  },
+  "sources": [],
+  "facts": [],
+  "field_evidence": {},
+  "missing_fields": [],
+  "warnings": [],
+  "extracted_at": null
+}

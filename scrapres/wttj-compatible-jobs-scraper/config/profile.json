@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "profile_version": "master-curriculum-v002",
+  "minimum_score": 75,
+  "allowed_departments": ["93", "75", "94", "77", "92"],
+  "allowed_location_terms": [
+    "ile-de-france",
+    "noisy-le-grand",
+    "paris",
+    "seine-saint-denis",
+    "val-de-marne",
+    "seine-et-marne",
+    "hauts-de-seine",
+    "saint-denis",
+    "montreuil",
+    "pantin",
+    "aubervilliers",
+    "villepinte",
+    "bobigny",
+    "rosny-sous-bois",
+    "fontenay-sous-bois",
+    "vincennes",
+    "nogent-sur-marne",
+    "creteil",
+    "ivry-sur-seine",
+    "charenton-le-pont",
+    "champs-sur-marne",
+    "chelles",
+    "torcy",
+    "lognes",
+    "noisiel",
+    "bussy-saint-georges",
+    "meaux",
+    "courbevoie",
+    "la defense",
+    "nanterre",
+    "boulogne-billancourt",
+    "levallois-perret",
+    "neuilly-sur-seine",
+    "puteaux",
+    "issy-les-moulineaux"
+  ],
+  "accepted_contracts": ["CDI", "CDD", "TEMPORAIRE", "INTERIM"],
+  "direct_title_terms": [
+    "agent administratif",
+    "assistant administratif",
+    "assistante administrative",
+    "secretaire administratif",
+    "secretaire administrative",
+    "gestionnaire administratif",
+    "gestionnaire administrative",
+    "assistant de gestion",
+    "assistante de gestion",
+    "assistant polyvalent",
+    "assistante polyvalente",
+    "agent d accueil",
+    "charge d accueil",
+    "chargee d accueil",
+    "back office",
+    "assistant scolarite",
+    "gestionnaire scolarite"
+  ],
+  "adjacent_title_terms": [
+    "administratif",
+    "administrative",
+    "administration",
+    "accueil",
+    "secretariat",
+    "scolarite",
+    "office assistant"
+  ],
+  "excluded_title_terms": [
+    "stage",
+    "stagiaire",
+    "alternance",
+    "apprentissage",
+    "commercial",
+    "marketing",
+    "comptable",
+    "comptabilite",
+    "paie",
+    "juridique",
+    "avocat",
+    "recrutement",
+    "ressources humaines",
+    "responsable",
+    "manager",
+    "directeur",
+    "directrice",
+    "chef de",
+    "ingenieur",
+    "technicien",
+    "developpeur",
+    "data analyst",
+    "adv"
+  ],
+  "mission_clusters": [
+    {
+      "id": "reception_orientation",
+      "terms": ["accueil physique", "accueil telephonique", "accueillir", "orienter", "renseigner", "relation usager", "relation client"],
+      "evidence_ids": ["MC-EXP-002", "MC-EXP-003", "MC-SKILL-002", "MC-SKILL-003"]
+    },
+    {
+      "id": "files_follow_up",
+      "terms": ["dossier administratif", "gestion des dossiers", "suivi des dossiers", "pieces justificatives", "documents manquants", "suivi administratif"],
+      "evidence_ids": ["MC-EXP-004", "MC-EXP-005", "MC-EXP-006", "MC-SKILL-001"]
+    },
+    {
+      "id": "data_tracking",
+      "terms": ["saisie", "mise a jour", "base de donnees", "tableau de suivi", "tableaux de bord", "fiabilite des donnees", "reporting"],
+      "evidence_ids": ["MC-EXP-007", "MC-EXP-014", "MC-SKILL-004", "MC-SKILL-009", "MC-SKILL-012"]
+    },
+    {
+      "id": "documents_writing",
+      "terms": ["attestation", "certificat", "courrier", "redaction", "mise en forme", "documents administratifs", "compte rendu"],
+      "evidence_ids": ["MC-EXP-008", "MC-EXP-009", "MC-SKILL-005", "MC-SKILL-014"]
+    },
+    {
+      "id": "mail_communication",
+      "terms": ["gestion des mails", "gestion des emails", "courrier entrant", "courrier sortant", "standard telephonique", "appels telephoniques"],
+      "evidence_ids": ["MC-EXP-010", "MC-SKILL-006"]
+    },
+    {
+      "id": "planning_coordination",
+      "terms": ["agenda", "rendez-vous", "organisation de reunions", "planification", "coordination", "interlocuteurs", "prestataires"],
+      "evidence_ids": ["MC-EXP-011", "MC-EXP-012", "MC-SKILL-008", "MC-SKILL-020"]
+    },
+    {
+      "id": "archive_documents",
+      "terms": ["classement", "archivage", "numerisation", "digitalisation", "gestion documentaire"],
+      "evidence_ids": ["MC-EXP-013", "MC-SKILL-007"]
+    },
+    {
+      "id": "organization_confidentiality",
+      "terms": ["rigueur", "organise", "organisation", "confidentialite", "discretion", "gestion des priorites", "respect des delais", "reactivite", "adaptabilite"],
+      "evidence_ids": ["MC-EXP-015", "MC-SKILL-017", "MC-SKILL-018", "MC-SKILL-019", "MC-SKILL-021"]
+    }
+  ],
+  "office_terms": ["pack office", "microsoft office", "word", "excel", "powerpoint", "outlook", "google docs", "google sheets", "google drive"],
+  "office_evidence_ids": ["MC-SKILL-010", "MC-SKILL-011"],
+  "experience_evidence_ids": ["MC-EXP-001"],
+  "language_evidence_ids": ["MC-LANG-002", "MC-CERT-001"]
+}
+

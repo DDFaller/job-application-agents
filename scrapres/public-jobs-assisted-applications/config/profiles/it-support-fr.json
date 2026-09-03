@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "id": "it-support-fr",
+  "display_name": "Suporte e operações de TI — setor público francês",
+  "profile_version": "public-v1",
+  "career_profile_current": "",
+  "top_count": 20,
+  "minimum_notion_score": 72,
+  "preliminary_threshold": 18,
+  "france_travail": {
+    "keywords": ["technicien support informatique", "support utilisateurs", "gestionnaire applications"],
+    "departments": []
+  },
+  "excluded_terms": ["apprenti", "apprentissage", "stage étudiant", "stagiaire", "internship"],
+  "blocked_title_terms": ["directeur", "directrice", "responsable de service", "architecte", "médecin", "infirm", "juriste"],
+  "preliminary_title_rules": [
+    { "source": "title", "terms": ["technicien support", "technicien informatique", "support informatique"], "points": 42 },
+    { "source": "title", "terms": ["assistance utilisateurs", "helpdesk", "service desk"], "points": 38 },
+    { "source": "title", "terms": ["gestionnaire d'applications", "administrateur fonctionnel", "applications métiers"], "points": 36 },
+    { "source": "title", "terms": ["systèmes et réseaux", "systèmes réseaux", "poste de travail"], "points": 32 },
+    { "source": "title", "terms": ["numérique", "informatique"], "points": 24 }
+  ],
+  "preliminary_bonus_rules": [
+    { "source": "combined", "terms": ["support utilisateurs", "gestion des incidents", "ticketing", "poste de travail"], "points": 8, "reason": "atividades de suporte identificadas" },
+    { "source": "combined", "terms": ["catégorie c", "categorie c", "catégorie : c"], "points": 10, "reason": "categoria C" },
+    { "source": "combined", "terms": ["catégorie b", "categorie b", "catégorie : b"], "points": 5, "reason": "categoria B" },
+    { "source": "combined", "terms": ["emploi permanent", "ouvert aux contractuels"], "points": 5, "reason": "vínculo acessível" }
+  ],
+  "direct_match_rules": [
+    { "source": "title", "terms": ["technicien support", "technicien informatique", "support informatique"], "points": 12, "reason": "intitulé diretamente ligado ao suporte", "evidence_key": "target_title", "exclusive_group": "title" },
+    { "source": "title", "terms": ["gestionnaire d'applications", "administrateur fonctionnel", "numérique", "informatique"], "points": 8, "reason": "intitulé próximo de operações digitais", "evidence_key": "target_title", "exclusive_group": "title" },
+    { "source": "all", "terms": ["support utilisateurs", "assistance utilisateurs", "helpdesk", "service desk"], "points": 10, "reason": "suporte a usuários", "evidence_key": "user_support" },
+    { "source": "all", "terms": ["gestion des incidents", "ticketing", "tickets", "diagnostic", "dépannage"], "points": 8, "reason": "diagnóstico e gestão de incidentes", "evidence_key": "incident_management" },
+    { "source": "all", "terms": ["poste de travail", "windows", "macos", "linux", "déploiement"], "points": 7, "reason": "administração de estações de trabalho", "evidence_key": "workstations" },
+    { "source": "all", "terms": ["active directory", "entra id", "annuaire", "gestion des comptes", "droits d'accès"], "points": 7, "reason": "contas, diretório e acessos", "evidence_key": "identity" },
+    { "source": "all", "terms": ["réseau", "tcp/ip", "wifi", "vpn", "switch"], "points": 6, "reason": "fundamentos de redes", "evidence_key": "networking" },
+    { "source": "all", "terms": ["documentation", "base de connaissances", "procédure", "inventaire"], "points": 5, "reason": "documentação e gestão do conhecimento", "evidence_key": "documentation" },
+    { "source": "all", "terms": ["formation des utilisateurs", "accompagnement", "sensibilisation"], "points": 5, "reason": "acompanhamento de usuários", "evidence_key": "training" },
+    { "source": "all", "terms": ["powershell", "bash", "javascript", "typescript", "python"], "points": 5, "reason": "automação e programação", "evidence_key": "automation" }
+  ],
+  "gap_rules": [
+    { "source": "requirements", "pattern": "certification (?:itil|microsoft|cisco|comptia)", "flags": "i", "label": "certificação técnica a verificar" },
+    { "source": "requirements", "pattern": "expérience.{0,30}(?:3|4|5) ans", "flags": "i", "label": "experiência mínima a verificar" },
+    { "source": "requirements", "pattern": "astreinte|permanence informatique", "flags": "i", "label": "disponibilidade para plantão a verificar" }
+  ],
+  "sector_signals": {
+    "technology_terms": ["informatique", "numérique", "application", "système", "réseau", "support utilisateurs"],
+    "technology_career_bonus": 3
+  },
+  "career_bonus_terms": ["formation", "évolution", "polyvalent", "automatisation", "modernisation", "projet"],
+  "practical_locations": {
+    "excellent": [],
+    "strong": [],
+    "acceptable": []
+  },
+  "evidence": {
+    "target_title": [],
+    "user_support": [],
+    "incident_management": [],
+    "workstations": [],
+    "identity": [],
+    "networking": [],
+    "documentation": [],
+    "training": [],
+    "automation": []
+  }
+}

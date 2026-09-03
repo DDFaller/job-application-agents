@@ -1,0 +1,11 @@
+interface:
+  display_name: "Requeue Unanswered Applications"
+  short_description: "Review and requeue stale APPLIED cards"
+  default_prompt: "Use $requeue-unanswered-applications to review my Notion board and move stale APPLIED cards to REAPPLY."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "notion"
+      description: "Authenticated Notion workspace access"
+      transport: "streamable_http"
+      url: "https://mcp.notion.com/mcp"
