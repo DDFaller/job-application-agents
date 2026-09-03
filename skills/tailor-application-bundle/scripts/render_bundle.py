@@ -444,6 +444,17 @@ def preflight_rendering(skill_dir: Path, *, builtin_latex: bool = True) -> None:
         if not shutil.which(tool)
     ]
     if builtin_latex and not missing:
+        # The built-in templates depend on Font Awesome. Report the package as
+        # a missing runtime dependency so callers can skip/fail clearly rather
+        # than discovering it halfway through a generated document.
+        package_check = subprocess.run(
+            ["kpsewhich", "fontawesome5.sty"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if not package_check.stdout.strip():
+            missing.append("fontawesome5.sty")
         for profile in ("international", "france"):
             try:
                 builtin_template(skill_dir, profile)
