@@ -44,6 +44,17 @@ def artifact_root() -> Path:
     return root
 
 
+DEFAULT_DIRECT_URL = "http://127.0.0.1:8000"
+
+
+def render_url() -> str:
+    """Base URL of the direct render worker (no Firestore required)."""
+    configured = os.environ.get("JAA_RENDER_URL")
+    if configured and configured.strip():
+        return configured.strip().rstrip("/")
+    return DEFAULT_DIRECT_URL
+
+
 DEFAULT_USER_ID = "default-user"
 
 

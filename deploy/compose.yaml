@@ -21,17 +21,25 @@ services:
     build:
       context: ..
       dockerfile: deploy/docker/latex-worker/Dockerfile
+    # Serve the synchronous /compile endpoint alongside the queue worker
+    # thread (run_server starts both when the repository is available).
+    # The Dockerfile entrypoint is untouched, so other stacks keep the
+    # queue-loop behavior.
+    command: ["python", "-m", "job_application_agents.render_service.server"]
     environment:
       JAA_FIREBASE_PROJECT_ID: demo-job-application-agents
       FIRESTORE_EMULATOR_HOST: firebase-emulator:8080
       JAA_ARTIFACT_ROOT: /artifacts
       JAA_WORKER_ID: ${JAA_WORKER_ID:-local-emulator-worker}
+      PORT: "8000"
     user: "${JAA_HOST_UID:-1000}:${JAA_HOST_GID:-1000}"
     volumes:
       - ${JAA_ARTIFACT_ROOT:?Set JAA_ARTIFACT_ROOT to an absolute host path}:/artifacts:z
     depends_on:
       firebase-emulator:
         condition: service_healthy
+    ports:
+      - "127.0.0.1:${JAA_RENDER_PORT:-8000}:8000"
     read_only: true
     tmpfs:
       - /tmp:size=256m,mode=1777
