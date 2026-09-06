@@ -1,31 +1,32 @@
 # Canonical source layout
 
-Keep only current, user-approved Markdown evidence and the optional approved CV portrait in the canonical source directory. This directory is factual and profile-neutral: never add role profiles, target-job narratives, generated headlines, scores, or job keywords. Use these filenames:
+Keep current, user-approved candidate evidence in the role-profile source directories under:
 
+`<data-root>/sources/<role-profile>/` (e.g. `sources/backend-engineer/`, `sources/ai-platform-engineer/`)
+
+Each role profile directory contains:
 - `identity.md` — name, headline, location, contact methods, professional and portfolio links
 - `experience.md` — employers, roles, dates, responsibilities, technologies, and outcomes
-- `projects.md` — project purpose, ownership, technologies, links, and outcomes
 - `education.md` — degrees, institutions, subjects, and dates
-- `skills.md` — independently supportable technical and interpersonal skills
+- `skills.md` — independently supportable technical, platform, and interpersonal skills
+- `projects.md` — project purpose, ownership, technologies, links, and outcomes
 - `languages.md` — language and explicit proficiency
-- `certifications.md` — credentials, issuer, identifier, and date
-- `profile-photo.jpg`, `profile-photo.jpeg`, or `profile-photo.png` — at most one explicitly approved CV portrait; not candidate evidence
-
-`identity.md` is required. Other files are optional until facts exist. Do not put archives, other originals, generated resumes, audit output, or instructions in this directory.
+- `pre-formatted.tex` — authoritative 1-page XeLaTeX reference CV demonstrating optimal phrasing and structure
+- `international_utilities.tex` — companion LaTeX macros for standalone compilation
+- `profile-photo.jpg`, `profile-photo.jpeg`, or `profile-photo.png` — optional approved CV portrait
 
 ## Fact format
 
-Write every factual assertion as one Markdown bullet beginning with a stable ID:
+Facts are written in clear, natural Markdown bullets. Bullet assertions should be factual, concise, and truthful:
 
 ```markdown
-- [MC-ID-001] Name: Ada Example
-- [MC-EXP-001] Worked at Example GmbH as a Backend Developer from 2024-01 to 2026-06.
-- [MC-EXP-002] Built Spring Boot APIs for the inventory domain.
+# Experience
+## Example GmbH
+- Worked at Example GmbH as a Backend Developer from 2024-01 to 2026-06.
+- Built Spring Boot APIs for the inventory domain with PostgreSQL and Kafka.
 ```
 
-Allowed prefixes are `ID`, `EXP`, `PROJ`, `EDU`, `SKILL`, `LANG`, and `CERT`. Use three or more digits. IDs are unique across the entire library and remain attached to the same fact through wording improvements. Assign a new ID to a genuinely new fact. Do not recycle deleted IDs.
-
-Use headings for organization, not factual claims. Keep one independently quotable claim per bullet. State dates, proficiency, technologies, responsibilities, and outcomes only when explicitly supplied. Preserve meaningful specificity, but split compound claims when their support differs.
+Legacy `[MC-ID-001]`, `[MC-EXP-001]` prefixes are supported for backwards compatibility, but are no longer required. State dates, proficiency, technologies, responsibilities, and outcomes truthfully without exaggeration.
 
 ## Update rules
 
@@ -47,4 +48,4 @@ Use headings for organization, not factual claims. Keep one independently quotab
 
 ## Compatibility boundary
 
-The live `tailor-application-bundle/references/candidate-evidence-template.json` and `scripts/validate_candidate_evidence.py` define technical readiness. This layout optimizes extraction but does not replace that validator. A technically valid evidence set can still have quality gaps.
+The live `/home/falluba/job-application-agents/skills/tailor-application-bundle/references/candidate-evidence-template.json` and `/home/falluba/job-application-agents/skills/tailor-application-bundle/scripts/validate_candidate_evidence.py` define technical readiness. This layout optimizes extraction but does not replace that validator. A technically valid evidence set can still have quality gaps.

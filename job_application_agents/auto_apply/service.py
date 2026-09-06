@@ -152,7 +152,9 @@ class AutoApplyService:
             job_data = json.loads((v_dir / "job.json").read_text(encoding="utf-8"))
 
         target_url = (
-            current_meta.get("canonical_url")
+            current_meta.get("application_url")
+            or job_data.get("application_url")
+            or current_meta.get("canonical_url")
             or job_data.get("canonical_url")
             or job_data.get("source_url")
             or job_data.get("url")

@@ -21,6 +21,56 @@ CONFIG_DIRECTORY = Path.home() / ".config" / "job-application-agents"
 CONFIG_PATH = CONFIG_DIRECTORY / "config.json"
 RENDER_CONFIG_PATH = CONFIG_DIRECTORY / "render.json"
 
+
+def load_dotenv(path: Path | None = None, *, override: bool = False) -> dict[str, str]:
+    """Parse a simple .env file into os.environ without third-party dependencies.
+
+    Existing environment variables are preserved unless ``override=True``.
+    Lines with comments (#) or empty lines are ignored. Values wrapped in
+    single or double quotes are stripped.
+    """
+    if path is None:
+        # Search current directory, repo root, and config directory
+        candidates = [
+            Path.cwd() / ".env",
+            Path(__file__).resolve().parent.parent / ".env",
+            CONFIG_DIRECTORY / ".env",
+        ]
+        for candidate in candidates:
+            if candidate.is_file():
+                path = candidate
+                break
+    if path is None or not path.is_file():
+        return {}
+
+    loaded: dict[str, str] = {}
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].strip()
+        if "=" not in line:
+            continue
+        key, raw_val = line.split("=", 1)
+        key = key.strip()
+        val = raw_val.strip()
+        if len(val) >= 2 and ((val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'"))):
+            val = val[1:-1]
+        loaded[key] = val
+        if override or key not in os.environ:
+            os.environ[key] = val
+    return loaded
+
+
+# Automatically load .env if present
+load_dotenv()
+
 APPLICATION_BACKENDS = (
     "firestore_notion",
     "firestore_only",
@@ -39,19 +89,106 @@ class ConfigurationError(ValueError):
     """Raised when a runtime configuration file contains invalid values."""
 
 
-def load_json_config(path: Path | None = None) -> dict[str, Any]:
-    """Load one strict JSON object, returning an empty object when absent.
+def resolve_data_root(
+    explicit: Path | str | None = None,
+    *,
+    environ: Mapping[str, str] | None = None,
+    config_path: Path | None = None,
+    repository_root: Path | None = None,
+) -> Path:
+    """Resolve the one private data root without consulting the working directory.
 
-    Deliberately using :func:`json.loads` here means JSONC comments are not
-    accepted at runtime. The example files are intended to be copied and
-    edited into the two comment-free files in ``~/.config``.
+    Managed workflows must not silently select ``./job-search``: an agent
+    session can have a different working directory or sandbox mount from its
+    coordinator.  Explicit input wins, then environment, then user config.
     """
 
-    config_path = (path or CONFIG_PATH).expanduser()
-    if not config_path.is_file():
+    env = os.environ if environ is None else environ
+    value: Path | str | None = explicit
+    if value is None:
+        value = _env(env, "JAA_DATA_ROOT", "INTEGRATIONS_DATA_ROOT")
+    if value is None:
+        value = load_storage_config(config_path, environ=env).data_root
+    if value is None:
+        raise ConfigurationError(
+            "data root is required; pass --data-root, set JAA_DATA_ROOT, "
+            "or configure storage.data_root"
+        )
+    root = Path(value).expanduser().resolve()
+    repo = repository_root.expanduser().resolve() if repository_root else None
+    if repo and (root == repo or root.is_relative_to(repo) or repo.is_relative_to(root)):
+        raise ConfigurationError("data root must be outside the repository")
+    return root
+
+
+def _strip_jsonc_comments(text: str) -> str:
+    """Strip // single line and /* */ block comments from JSONC."""
+    # Remove block comments
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
+    # Remove line comments that are not inside quotes
+    lines = []
+    for line in text.splitlines():
+        in_quote = False
+        quote_char = ""
+        escape = False
+        comment_idx = None
+        for i, char in enumerate(line):
+            if escape:
+                escape = False
+                continue
+            if char == "\\":
+                escape = True
+                continue
+            if char in ('"', "'"):
+                if not in_quote:
+                    in_quote = True
+                    quote_char = char
+                elif quote_char == char:
+                    in_quote = False
+            elif not in_quote and char == "/" and i + 1 < len(line) and line[i + 1] == "/":
+                comment_idx = i
+                break
+        if comment_idx is not None:
+            lines.append(line[:comment_idx])
+        else:
+            lines.append(line)
+    return "\n".join(lines)
+
+
+def load_json_config(path: Path | None = None) -> dict[str, Any]:
+    """Load one JSON/JSONC object, returning an empty object when absent.
+
+    Looks for specified path, or checks in-repo and user config directory
+    (supporting both config.json and config.jsonc).
+    """
+
+    if path is not None:
+        candidates = [path.expanduser()]
+    else:
+        repo_root = Path(__file__).resolve().parent.parent
+        candidates = [
+            CONFIG_PATH,
+            CONFIG_PATH.with_suffix(".jsonc"),
+            repo_root / "config.json",
+            repo_root / "config.jsonc",
+        ]
+
+    config_path = None
+    for candidate in candidates:
+        if candidate.is_file():
+            config_path = candidate
+            break
+
+    if config_path is None:
         return {}
+
+    if config_path.name.endswith(".example.jsonc"):
+        raise ConfigurationError(f"invalid JSON configuration {config_path}: example files cannot be used directly")
+
     try:
-        value = json.loads(config_path.read_text(encoding="utf-8"))
+        raw_text = config_path.read_text(encoding="utf-8")
+        clean_text = _strip_jsonc_comments(raw_text) if config_path.suffix == ".jsonc" else raw_text
+        value = json.loads(clean_text)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ConfigurationError(f"invalid JSON configuration {config_path}: {exc}") from exc
     if not isinstance(value, dict):
@@ -229,4 +366,5 @@ __all__ = [
     "load_json_config",
     "load_render_config",
     "load_storage_config",
+    "resolve_data_root",
 ]

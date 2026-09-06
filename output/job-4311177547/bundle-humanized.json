@@ -1,0 +1,539 @@
+{
+  "schema_version": 5,
+  "inputs": {
+    "job_json": "output/job-4311177547/job.json",
+    "job_sha256": null,
+    "role_profile": "backend-engineer",
+    "role_profile_source_dir": "~/Documents/job-search/sources/backend-engineer/",
+    "candidate_evidence_json": null,
+    "candidate_evidence_sha256": null,
+    "role_profiles_json": null,
+    "role_profiles_sha256": null
+  },
+  "job": {
+    "company": "Harmattan AI",
+    "role": "Software Engineer",
+    "canonical_url": "https://www.linkedin.com/jobs/view/4311177547/",
+    "source_url": "https://www.linkedin.com/jobs/view/4311177547/",
+    "application_url": null
+  },
+  "tailoring_strategy": {
+    "job_family": "computing",
+    "document_focus": "technical",
+    "profile_ranking": [],
+    "selected_profile_id": "backend-engineer",
+    "selected_profile_anchor_evidence_ids": [],
+    "selected_profile_supporting_evidence_ids": [],
+    "positioning_candidate_evidence_ids": [],
+    "claim_scores": [],
+    "job_priorities": [
+      {
+        "text": "C++ and Qt for desktop or embedded applications",
+        "job_evidence_keys": [
+          "requirements.1",
+          "responsibilities.0"
+        ]
+      },
+      {
+        "text": "Android development (Java or C++/NDK)",
+        "job_evidence_keys": [
+          "requirements.2",
+          "technologies.2",
+          "technologies.3",
+          "technologies.4"
+        ]
+      },
+      {
+        "text": "UX/UI design principles and cross-platform optimization",
+        "job_evidence_keys": [
+          "requirements.3"
+        ]
+      },
+      {
+        "text": "Robotics or drones experience (strong plus)",
+        "job_evidence_keys": [
+          "preferred_skills.0"
+        ]
+      },
+      {
+        "text": "MAVLink, PX4, ground control systems knowledge (advantage)",
+        "job_evidence_keys": [
+          "preferred_skills.1",
+          "technologies.6",
+          "technologies.7"
+        ]
+      }
+    ],
+    "selected_candidate_evidence_ids": [],
+    "deprioritized_candidate_evidence_ids": [],
+    "fit_arguments": [
+      {
+        "text": "Qt development experience from Tecgraf annotation platform directly maps to the role's C++/Qt QGroundControl requirement, though the candidate used Python bindings rather than pure C++ Qt.",
+        "candidate_evidence_ids": [
+          "MC-EXP-025"
+        ],
+        "job_evidence_keys": [
+          "requirements.1",
+          "responsibilities.0"
+        ]
+      },
+      {
+        "text": "Android development experience through DOSVOX assistive application using Android Studio, HTML, CSS, and JavaScript demonstrates mobile platform competency relevant to the Android-based GCS controllers.",
+        "candidate_evidence_ids": [
+          "MC-EXP-031",
+          "MC-EXP-033"
+        ],
+        "job_evidence_keys": [
+          "requirements.2",
+          "technologies.2"
+        ]
+      },
+      {
+        "text": "C language proficiency from university coursework provides foundational systems programming knowledge applicable to C++ embedded development, though professional C++ experience is limited.",
+        "candidate_evidence_ids": [
+          "MC-SKILL-021"
+        ],
+        "job_evidence_keys": [
+          "requirements.1"
+        ]
+      },
+      {
+        "text": "Java experience from university projects complements the Android development requirement for the Java/Kotlin side of Android application development.",
+        "candidate_evidence_ids": [
+          "MC-SKILL-023"
+        ],
+        "job_evidence_keys": [
+          "requirements.2",
+          "technologies.3"
+        ]
+      },
+      {
+        "text": "Master's degree in Computer Science (IMA: Images, Vision, Computer Graphics) at Sorbonne Université aligns with the role's requirement for a Master's in Software Engineering or related field, with relevant graphics and vision coursework.",
+        "candidate_evidence_ids": [
+          "MC-EDU-001"
+        ],
+        "job_evidence_keys": [
+          "requirements.0"
+        ]
+      }
+    ],
+    "selection_rationale": {
+      "text": "The backend-engineer profile was selected because it contains the most relevant evidence for this embedded systems role: Qt development experience (Tecgraf), Android development (DOSVOX), C language proficiency, and a Master's degree in a related field. While the candidate lacks direct professional C++ experience and has no drone/robotics background, the transferable systems programming and cross-platform development experience provides a foundation. The role's preferred skills (MAVLink, PX4, drones) are significant gaps that should be acknowledged.",
+      "candidate_evidence_ids": [
+        "MC-EXP-025",
+        "MC-EXP-031",
+        "MC-EXP-033",
+        "MC-SKILL-021",
+        "MC-SKILL-023",
+        "MC-EDU-001"
+      ],
+      "job_evidence_keys": [
+        "requirements.0",
+        "requirements.1",
+        "requirements.2",
+        "responsibilities.0",
+        "technologies.2",
+        "technologies.3",
+        "preferred_skills.0"
+      ]
+    }
+  },
+  "candidate": {
+    "name": "Daniel Faller",
+    "headline": "Software Engineer | Systems Programming, Qt & Android",
+    "headline_evidence_ids": [],
+    "location": "Paris, France",
+    "contact": [
+      "danielmfaller@protonmail.com",
+      "+330750159011",
+      "https://github.com/DDFaller",
+      "https://linkedin.com/in/daniel-m-faller",
+      "https://ddfaller.github.io/Projects_index/"
+    ],
+    "summary": {
+      "text": "Software engineer with hands-on experience building Qt applications and Android mobile tools. At Tecgraf, I developed a Python-Qt annotation platform for medical imaging, and at DOSVOX Laboratory I built an Android app for assistive communication. I'm currently completing a Master's in Computer Science (Images, Vision, Computer Graphics) at Sorbonne Université, with solid foundations in C, Java, and systems programming.",
+      "evidence_ids": []
+    }
+  },
+  "resume_sections": [
+    {
+      "title": "Profile",
+      "items": [
+        {
+          "type": "text",
+          "text": "Software Engineer with hands-on experience in Qt application development, Android mobile platforms, and cross-system tooling. Currently completing a Master's in Computer Science (Images, Vision, Computer Graphics) at Sorbonne Université with strong foundations in systems programming.",
+          "evidence_ids": []
+        }
+      ]
+    },
+    {
+      "title": "Experience",
+      "items": [
+        {
+          "type": "experience",
+          "company": "Back Market",
+          "position": "Backend Engineer Intern",
+          "location": "Paris, France",
+          "dates": "February 2026 -- August 2026",
+          "summary": "Designed and implemented Python DSL-based pipelines for standardized data ingestion and built AI-powered automation tools.",
+          "highlights": [
+            {
+              "text": "Extracted 80+ standardized fields using Pydantic, pytest, and dbt models; orchestrated workflows with Apache Airflow and BigQuery.",
+              "evidence_ids": [
+                "MC-EXP-002",
+                "MC-EXP-003",
+                "MC-EXP-039"
+              ]
+            },
+            {
+              "text": "Built AI-powered automation tools for provider onboarding and implemented auto-healing system reducing costs from $1,000/month to $50/week.",
+              "evidence_ids": [
+                "MC-EXP-005",
+                "MC-EXP-023"
+              ]
+            }
+          ],
+          "evidence_ids": [
+            "MC-EXP-001"
+          ]
+        },
+        {
+          "type": "experience",
+          "company": "OLX",
+          "position": "Junior Software Engineer",
+          "location": "Rio de Janeiro, Brazil",
+          "dates": "January 2021 -- February 2022",
+          "summary": "Built and maintained internal data and developer platform tooling on Kubernetes with GPU-accelerated container images.",
+          "highlights": [
+            {
+              "text": "Deployed Kubeflow-based JupyterLab platform on Kubernetes for reproducible data science workspaces with GPU support.",
+              "evidence_ids": [
+                "MC-EXP-012",
+                "MC-EXP-013"
+              ]
+            }
+          ],
+          "evidence_ids": [
+            "MC-EXP-009"
+          ]
+        },
+        {
+          "type": "experience",
+          "company": "OLX",
+          "position": "Software Engineering Intern",
+          "location": "Rio de Janeiro, Brazil",
+          "dates": "July 2020 -- January 2021",
+          "summary": "Contributed to containerized analytics workspaces and automated platform tooling on Kubernetes.",
+          "highlights": [],
+          "evidence_ids": [
+            "MC-EXP-010"
+          ]
+        },
+        {
+          "type": "experience",
+          "company": "Tecgraf Institute",
+          "position": "Software Development Intern",
+          "location": "Rio de Janeiro, Brazil",
+          "dates": "January 2019 -- December 2020",
+          "summary": "Developed Python-Qt annotation platforms for medical imaging and conducted database integration research.",
+          "highlights": [
+            {
+              "text": "Developed a prototype annotation platform for third parties in Python with Qt for medical-image annotation and data preparation.",
+              "evidence_ids": [
+                "MC-EXP-025"
+              ]
+            },
+            {
+              "text": "Created interactive visual presentations and XR simulation environments using Unity and C# for Petrobras.",
+              "evidence_ids": [
+                "MC-EXP-027",
+                "MC-EXP-028"
+              ]
+            }
+          ],
+          "evidence_ids": [
+            "MC-EXP-014"
+          ]
+        },
+        {
+          "type": "experience",
+          "company": "DOSVOX Laboratory -- UFRJ",
+          "position": "Informatics Technician",
+          "location": "Rio de Janeiro, Brazil",
+          "dates": "July 2017 -- December 2017",
+          "summary": "Implemented an Android assistive communication application using Android Studio, HTML, CSS, and JavaScript.",
+          "highlights": [
+            {
+              "text": "Built an Android application for assistive communication by people with motor limitations, using touch-based card selection interface.",
+              "evidence_ids": [
+                "MC-EXP-031",
+                "MC-EXP-032",
+                "MC-EXP-033"
+              ]
+            }
+          ],
+          "evidence_ids": [
+            "MC-EXP-030"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Education",
+      "items": [
+        {
+          "type": "education",
+          "institution": "Sorbonne Université",
+          "area": "Images, Vision, Computer Graphics (IMA)",
+          "degree": "Master Informatique",
+          "location": "Paris, France",
+          "dates": "September 2024 -- September 2026",
+          "summary": null,
+          "highlights": [],
+          "evidence_ids": [
+            "MC-EDU-001"
+          ]
+        },
+        {
+          "type": "education",
+          "institution": "PUC-Rio",
+          "area": "Software Engineering",
+          "degree": "Specialization (Lato Sensu) in Software Engineering",
+          "location": "Rio de Janeiro, Brazil",
+          "dates": "January 2023 -- January 2024",
+          "summary": null,
+          "highlights": [],
+          "evidence_ids": [
+            "MC-EDU-004"
+          ]
+        },
+        {
+          "type": "education",
+          "institution": "PUC-Rio",
+          "area": "Computer Science",
+          "degree": "Bachelor of Science in Computer Science",
+          "location": "Rio de Janeiro, Brazil",
+          "dates": "January 2018 -- January 2021",
+          "summary": null,
+          "highlights": [],
+          "evidence_ids": [
+            "MC-EDU-006"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Technical Skills",
+      "items": [
+        {
+          "type": "one_line",
+          "label": "Languages",
+          "details": "Python, C, Java, JavaScript, TypeScript, C#, SQL, Bash/Shell",
+          "evidence_ids": [
+            "MC-SKILL-018",
+            "MC-SKILL-021",
+            "MC-SKILL-023",
+            "MC-SKILL-022",
+            "MC-SKILL-033",
+            "MC-SKILL-042",
+            "MC-SKILL-019",
+            "MC-SKILL-020"
+          ]
+        },
+        {
+          "type": "one_line",
+          "label": "Frameworks & Tools",
+          "details": "Qt, Android Studio, Unity, Docker, Kubernetes, Apache Airflow, BigQuery, PostgreSQL",
+          "evidence_ids": [
+            "MC-SKILL-054",
+            "MC-SKILL-052",
+            "MC-SKILL-002",
+            "MC-SKILL-001",
+            "MC-SKILL-012",
+            "MC-SKILL-024",
+            "MC-SKILL-028"
+          ]
+        },
+        {
+          "type": "one_line",
+          "label": "ML & Data",
+          "details": "PyTorch, TensorFlow, OpenCV, CUDA, pandas, NumPy, scikit-learn, dbt, Pydantic",
+          "evidence_ids": [
+            "MC-SKILL-048",
+            "MC-SKILL-047",
+            "MC-SKILL-046",
+            "MC-SKILL-051",
+            "MC-SKILL-030",
+            "MC-SKILL-050",
+            "MC-SKILL-031",
+            "MC-SKILL-045",
+            "MC-SKILL-044"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Projects",
+      "items": [
+        {
+          "type": "normal",
+          "name": "Kite AI -- Decentralized Compute Resource Agent",
+          "location": null,
+          "dates": "2026",
+          "summary": "Built an autonomous agent with Python, FastAPI, AWS S3, and smart contracts to dynamically rent and monetize compute resources.",
+          "highlights": [],
+          "evidence_ids": [
+            "MC-PROJ-009",
+            "MC-PROJ-010"
+          ]
+        },
+        {
+          "type": "normal",
+          "name": "CISPA Paris Cybersecurity & AI Hackathon (Top 7 Finalist)",
+          "location": null,
+          "dates": "2025",
+          "summary": "Engineered a generative model attribution pipeline using data augmentation and hyperparameter optimization in PyTorch.",
+          "highlights": [],
+          "evidence_ids": [
+            "MC-PROJ-007",
+            "MC-PROJ-008"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Languages",
+      "items": [
+        {
+          "type": "one_line",
+          "label": "Spoken Languages",
+          "details": "Portuguese (Native), English (C1 -- Professional), French (B1 -- Intermediate)",
+          "evidence_ids": [
+            "MC-LANG-001",
+            "MC-LANG-002",
+            "MC-LANG-003"
+          ]
+        }
+      ]
+    }
+  ],
+  "motivation_letter": {
+    "date": "2026-09-04",
+    "recipient": "Harmattan AI Hiring Team",
+    "subject": "Software Engineer Application -- Ground Control Systems",
+    "salutation": "Dear Hiring Team,",
+    "paragraphs": [
+      {
+        "text": "I'm writing to apply for the Software Engineer role on the Ground Control Systems team at Harmattan AI. Having worked with Qt for desktop applications and Android for mobile tools, the challenge of building high-performance, Android-based control stations for UAV operations genuinely excites me.",
+        "candidate_evidence_ids": [
+          "MC-EXP-025",
+          "MC-EXP-031"
+        ]
+      },
+      {
+        "text": "At Tecgraf Institute, I built a prototype annotation platform using Python with Qt for medical imaging, which gave me practical experience with Qt's signal-slot architecture and cross-platform UI work. At DOSVOX Laboratory, I created an Android app for assistive communication using Android Studio, designing touch-based interfaces for users with motor limitations. Together, these projects gave me a solid foundation in both Qt desktop development and Android mobile platforms — exactly the combination needed to adapt and extend QGroundControl.",
+        "candidate_evidence_ids": [
+          "MC-EXP-025",
+          "MC-EXP-031",
+          "MC-EXP-033"
+        ]
+      },
+      {
+        "text": "My Master's studies in Computer Science at Sorbonne Université, focused on images, vision, and computer graphics, have deepened my understanding of graphics programming and systems-level computing. On top of that, my professional experience building data pipelines and automation tools at Back Market shows I can deliver reliable software in fast-paced, high-stakes environments.",
+        "candidate_evidence_ids": [
+          "MC-EDU-001",
+          "MC-EXP-001"
+        ]
+      },
+      {
+        "text": "What draws me to Harmattan AI is the mission to build autonomous defense systems with real-world impact. I'll be honest — my background is more in data platforms and tooling than in embedded C++ or drone systems. But I have strong fundamentals in C, Java, and systems programming, and I pick up new technologies quickly. I'm genuinely eager to deepen my expertise in Qt/C++ development and ground control systems, and I'd welcome the chance to contribute to your team while growing in this domain.",
+        "candidate_evidence_ids": []
+      }
+    ],
+    "closing": "I look forward to discussing how my experience and enthusiasm can contribute to the Ground Control Systems team at Harmattan AI.",
+    "signature": "Daniel Faller"
+  },
+  "match_analysis": {
+    "matched": [
+      {
+        "text": "Qt development experience (Tecgraf annotation platform) maps to the role's C++/Qt QGroundControl requirement.",
+        "candidate_evidence_ids": [
+          "MC-EXP-025"
+        ],
+        "job_evidence_keys": [
+          "requirements.1",
+          "responsibilities.0"
+        ]
+      },
+      {
+        "text": "Android development experience (DOSVOX assistive application) demonstrates mobile platform competency for the Android-based GCS controllers.",
+        "candidate_evidence_ids": [
+          "MC-EXP-031",
+          "MC-EXP-033"
+        ],
+        "job_evidence_keys": [
+          "requirements.2",
+          "technologies.2"
+        ]
+      },
+      {
+        "text": "Master's degree in Computer Science (IMA) at Sorbonne Université satisfies the Master's degree requirement in a related field.",
+        "candidate_evidence_ids": [
+          "MC-EDU-001"
+        ],
+        "job_evidence_keys": [
+          "requirements.0"
+        ]
+      },
+      {
+        "text": "C and Java language proficiency provides foundational systems and mobile programming skills applicable to the role.",
+        "candidate_evidence_ids": [
+          "MC-SKILL-021",
+          "MC-SKILL-023"
+        ],
+        "job_evidence_keys": [
+          "requirements.1",
+          "requirements.2"
+        ]
+      }
+    ],
+    "gaps": [
+      {
+        "text": "No professional C++ experience; candidate has used C and Python with Qt but not C++ in a production environment.",
+        "candidate_evidence_ids": [
+          "MC-SKILL-021"
+        ],
+        "job_evidence_keys": [
+          "requirements.1",
+          "responsibilities.0"
+        ]
+      },
+      {
+        "text": "No experience with embedded systems, drone/UAV platforms, or ground control systems.",
+        "candidate_evidence_ids": [],
+        "job_evidence_keys": [
+          "preferred_skills.0",
+          "preferred_skills.1"
+        ]
+      },
+      {
+        "text": "No knowledge of MAVLink, PX4, or QGroundControl open-source platform.",
+        "candidate_evidence_ids": [],
+        "job_evidence_keys": [
+          "preferred_skills.1",
+          "technologies.6",
+          "technologies.7"
+        ]
+      },
+      {
+        "text": "No experience with hardware integration (joysticks, buttons, switches, touchscreen physical controls).",
+        "candidate_evidence_ids": [],
+        "job_evidence_keys": [
+          "responsibilities.1"
+        ]
+      }
+    ],
+    "credibility_warnings": []
+  },
+  "generated_at": "2026-09-04T18:45:00+02:00"
+}

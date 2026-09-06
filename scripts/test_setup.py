@@ -75,6 +75,19 @@ class SetupTests(unittest.TestCase):
             self.assertEqual(name, "personal")
             self.assertEqual([item["name"] for item in data["plugins"]], ["other", setup.PLUGIN_NAME])
 
+    def test_data_root_config_preserves_unrelated_values(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            path = home / setup.USER_CONFIG
+            path.parent.mkdir(parents=True)
+            path.write_text(json.dumps({"storage": {"notion_sync": "disabled"}, "other": 1}))
+            setup.write_data_root_config(home, home / "private-data")
+            value = json.loads(path.read_text())
+            self.assertEqual(value["storage"]["notion_sync"], "disabled")
+            self.assertEqual(value["data_root"], str((home / "private-data").resolve()))
+            self.assertEqual(value["other"], 1)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
     def test_rules_allow_only_named_first_party_scripts(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

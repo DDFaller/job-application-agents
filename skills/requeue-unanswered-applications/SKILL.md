@@ -13,7 +13,7 @@ A normal board review or requeue request authorizes the documented status mutati
 
 ## Workflow
 
-1. Resolve the installed `$notion-track-application` skill and read its `references/notion-schema.md` as the authoritative database contract, including the `REAPPLY` status rule; do not reproduce or fork its schema.
+1. Resolve the installed `$notion-track-application` skill and read `/home/falluba/job-application-agents/skills/notion-track-application/references/notion-schema.md` as the authoritative database contract, including the `REAPPLY` status rule; do not reproduce or fork its schema.
 2. Use a default threshold of `14` days unless the user overrides it for the run. Calculate age in whole local-calendar days as today's runtime-local date minus `Generated At`: keep a date-only value unchanged; convert an offset-aware datetime to the runtime timezone before taking its date. A card is eligible when age is greater than or equal to the threshold. Never read `Applied At` for this calculation or use it as a fallback.
 3. Call Notion `fetch` with `self` before any query or write. If it fails, direct the user to `codex mcp login notion` and stop.
 4. Find the exact-title `Job Applications` database and fetch it to obtain its database ID, data-source ID, and exact property and option names. If the database does not exist, tell the user there is nothing to requeue and stop; do not create the database from this skill.

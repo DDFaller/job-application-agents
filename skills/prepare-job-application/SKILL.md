@@ -1,50 +1,38 @@
 ---
 name: prepare-job-application
-description: Orchestrate one job application by extracting a public opening, combining neutral master-curriculum evidence with an approved role-profile catalog, tailoring and independently reviewing an editable LaTeX bundle, and tracking it in Notion. Use for computing, non-computing, mixed, or minor-job applications. Pause with an explained profile proposal when no approved profile fits.
+description: "Define and validate the flat single-job application DAG used by the durable batch controller. Use to prepare a reviewable draft from a public opening; never spawn agents, maintain the master curriculum, submit, or mark APPLIED."
 ---
 
 # Prepare Job Application
 
-Ranked entries from `$rank-job-shortlist` are accepted as triage inputs, but
-the complete workflow still validates the normalized posting, source evidence,
-candidate evidence, and approved role profile before drafting.
+This is an orchestration specification, not a worker stage. When the durable
+controller is available, do not launch a `$prepare-job-application` session.
+The controller expands it into one clean session for each semantic stage and
+passes data only through validated artifacts.
 
-Coordinate `$extract-job-opening`, `$tailor-application-bundle`, and `$notion-track-application` in that order.
+Read `/home/falluba/job-application-agents/skills/prepare-job-application/references/workflow.md`, then require one public opening URL or pasted
+posting, an explicit canonical data root outside the repository (`~/Documents/job-search`),
+discovered role-profile sources under `~/Documents/job-search/sources/<role-profile>/`, and a unique run ID with a controller-owned timing ledger.
 
-This workflow is hands-off: it prepares and tracks a reviewable draft only.
-Never invoke the auto-apply engine, enqueue a submission job, contact an
-employer, or mark a record `APPLIED`. Notion credentials remain in the parent
-connector and must not be passed to nested workers.
+The streamlined stage order is:
+1. `job-extraction` (extracts job posting to `source.md` and `job.json`)
+2. `bundle-writing` (grounds drafting directly in selected role profile sources)
+3. `copy-humanization` (polishes tone while preserving facts)
+4. `independent-review` (audits bundle quality and evidence)
+5. `render-promotion` (compiles XeLaTeX resume and motivation letter, generates PDFs)
+The coordinator may then perform a deduplicated Notion update through its connector. Dependencies are serial within one job; different jobs may progress concurrently.
 
-When invoked by `$manage-job-applications`, accept its timing-ledger path and
-run ID and append all stage events to that ledger. At minimum record job and
-candidate extraction, profile resolution, all validation and repair, tailoring
-and review attempts, staged rendering/promotion, and Notion synchronization. Pass
-the same context to nested skills. A blocked gate must close its active event,
-open a `kind: wait` event, and finalize the run as `needs_input` until resumed.
-All timestamps must be created through `workflow_timing.py`; never fabricate
-or backfill event timestamps from worker prose.
+Every worker receives one `StageTask` and returns one `StageResult`. It must not
+spawn or delegate, edit batch state or timing, access Notion, update the master
+curriculum, or use conversational continuation as state. On failure, retry
+only that stage with accepted upstream artifacts and a new attempt path.
 
-## Live status contract
+If no approved profile fits, the bundle stage may emit a validated profile
+proposal and non-retryable `profile_approval_required` blocker. End as
+`needs_input`; a separate explicit `$maintain-master-curriculum` workflow is
+required to review and publish it.
 
-- Before spawning work, report `[company/role or queue label] status: starting` with the planned parallel branches.
-- Report every stage start, completion, retry, blocker, and recovery. If no transition occurs for 45 seconds, emit a heartbeat with completed stages, active stages/agents, next stage, blocker, and elapsed time. Never wait longer than 45 seconds while workers are active without checking for updates.
-- When invoked as a worker, send each transition and heartbeat to the calling coordinator; the coordinator alone turns them into user-facing commentary. When invoked directly, publish them yourself.
-- Use `workflow_timing.py status --file <ledger>` as the factual snapshot. Worker prose may explain a state but must not replace the ledger.
-- End with exactly one status: `prepared`, `needs input`, or `failed`, plus artifacts, Notion result, and timing.
-
-## End-to-end workflow
-
-1. Read `references/workflow.md` and resolve the application root.
-2. Start job extraction, candidate-evidence mapping/cache lookup, `$resolve-approved-role-profile`, and render-service preflight concurrently. Submit all independent work before waiting. In managed mode, use the exact read-only result supplied by `$manage-job-applications` and its explicit data root. Reuse a validated evidence cache entry; only run the mapping agent while holding the cache-build lock on a miss. If multi-agent capacity is unavailable, report degraded serial mode.
-3. Join and validate the job, schema-3 candidate evidence, and approved role-profile catalog. Require typed work/education records and an exact match between candidate sources and the catalog's source binding. Stop if any input is partial, stale, blocked, or missing identity/contact evidence.
-   If candidate mapping is unavailable, close the active event, record a
-   `kind: wait` event, and return `needs_input`; do not pass provisional output
-   to tailoring.
-4. Run the complete `$tailor-application-bundle` workflow in reuse mode with candidate evidence and the approved catalog. Require profile ranking, claim scores, evidence partition, structural validation, `$humanize-application-copy` for the CV profile and motivation letter, and independent review. If it returns a validated profile proposal, record `needs_input`, return its reason and path, and stop before rendering or Notion. Do not invoke curriculum maintenance from this workflow.
-5. Start temporary XeLaTeX rendering concurrently with the distinct independent semantic-review agent. Use `--profile auto`: clearly French locations receive the preserved A4 sidebar template and all others receive the compact international template. The France profile requires the approved canonical candidate photo. Promote the staged artifacts only after the exact bundle receives a validated `accept` verdict. No visual inspection is required.
-6. Compute the 100-point match score (Skills: 0–30, Experience: 0–25, Role: 0–20, Location: 0–15, Company Fit: 0–5, Compensation: 0–5) and upsert the Notion record in `TO_APPLY` only after local success. The Notion synchronization must include `Match Score` property, match breakdown callout, current resume and motivation-letter PDFs, and the editable LaTeX sources (`resume.tex`, `letter.tex`, and `preamble.tex`); when individual `.tex` uploads are unsupported, attach a versioned ZIP containing those exact raw files.
-7. Return the local version directory and Notion page URL. Do not submit the application.
-
-
-If Notion fails, keep the local bundle and retry synchronization from its manifest; do not regenerate documents. If extraction fails, request pasted content rather than bypassing authentication.
+A job is locally `prepared` only after the exact reviewed bundle is rendered,
+passes deterministic PDF/text/page gates, and is atomically promoted. Notion
+failure does not invalidate local preparation. Never submit, contact the
+employer, invoke auto-apply, or mark `APPLIED`.

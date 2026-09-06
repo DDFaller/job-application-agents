@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Application Bundle"
+  short_description: "Independently review one exact bundle"
+  default_prompt: "Use $review-application-bundle to execute only the supplied independent-review StageTask."

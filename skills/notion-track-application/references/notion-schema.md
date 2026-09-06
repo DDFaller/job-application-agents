@@ -14,6 +14,8 @@ CREATE TABLE (
   "Work Model" SELECT('On-site':yellow, 'Hybrid':blue, 'Remote':green, 'Unspecified':gray),
   "Source" SELECT('LinkedIn':blue, 'Personio':green, 'Other ATS':purple, 'Pasted text':gray),
   "Job URL" URL,
+  "Source URL" URL,
+  "Application URL" URL,
   "Source Job ID" RICH_TEXT,
   "Current Version" RICH_TEXT,
   "Generated At" DATE,

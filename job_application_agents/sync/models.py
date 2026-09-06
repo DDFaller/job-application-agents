@@ -268,6 +268,8 @@ class ApplicationSyncSnapshot:
     status: str
     current_version: str
     canonical_url: str | None = None
+    source_url: str | None = None
+    application_url: str | None = None
     local_path: str | None = None
     notion_page_id: str | None = None
     notion_page_url: str | None = None
@@ -291,6 +293,8 @@ class ApplicationSyncSnapshot:
             "role_slug": self.role_slug,
             "job_id_or_hash": self.job_id_or_hash,
             "canonical_url": self.canonical_url,
+            "source_url": self.source_url,
+            "application_url": self.application_url,
             "local_path": self.local_path,
             "status": self.status,
             "current_version": self.current_version,
@@ -319,6 +323,8 @@ class ApplicationSyncSnapshot:
             role_slug=str(data.get("role_slug", "")),
             job_id_or_hash=str(data.get("job_id_or_hash", "")),
             canonical_url=data.get("canonical_url"),
+            source_url=data.get("source_url"),
+            application_url=data.get("application_url"),
             local_path=data.get("local_path"),
             status=str(data.get("status", "TO_APPLY")),
             current_version=str(data.get("current_version", "v001")),

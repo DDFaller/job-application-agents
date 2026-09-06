@@ -1,4 +1,4 @@
 interface:
   display_name: "Maintain Master Curriculum"
-  short_description: "Maintain facts and approved work profiles"
-  default_prompt: "Use $maintain-master-curriculum to update my neutral evidence library and separately discover or review evidence-backed role profiles."
+  short_description: "Explicit staged evidence maintenance"
+  default_prompt: "Use $maintain-master-curriculum only for my explicit maintenance request and execute one supplied maintenance stage without delegation."

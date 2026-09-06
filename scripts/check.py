@@ -64,11 +64,12 @@ def main() -> int:
             "test_*.py",
             "-v",
         ]
-        # auto_apply contains a package subdirectory (`drivers`) whose
-        # relative imports require unittest's repository top-level context.
-        if directory == ROOT / "job_application_agents" / "auto_apply":
+        # job_application_agents packages use relative imports that require
+        # unittest's repository top-level context (-t ROOT).
+        if str(directory).startswith(str(ROOT / "job_application_agents")):
             command[command.index("-p"):command.index("-p")] = ["-t", str(ROOT)]
         ok = run(command) and ok
+    ok = run([sys.executable, "-m", "unittest", "-v", "job_application_agents.test_config"]) and ok
     return 0 if ok else 1
 
 

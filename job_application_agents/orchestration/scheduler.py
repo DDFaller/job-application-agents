@@ -1,16 +1,18 @@
-"""Capacity-aware scheduling primitives for nested application workflows.
+"""Deprecated compatibility primitives for the pre-controller scheduler.
 
-The Codex launcher currently permits six nested threads. A complete application
-needs multiple workers at once, so launching one parent per queue item can
-leave every parent waiting for capacity. This module deliberately contains no
-agent or network logic; it gives coordinators a small, testable reservation
-contract they can use before delegating work.
+New code must use :class:`orchestration.controller.BatchController`, which
+limits active jobs and launches a flat sequence of stages. These classes remain
+temporarily importable from this module so existing callers can migrate; they
+are deliberately no longer exported from ``job_application_agents.orchestration``.
 """
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 from threading import Lock
+from typing import Callable, Deque, Literal
+from uuid import uuid4
 
 
 @dataclass(frozen=True)
@@ -37,6 +39,42 @@ class WorkflowLease:
 
     label: str
     slots: int
+
+
+@dataclass(frozen=True)
+class ApplicationQueueItem:
+    """One complete application awaiting nested-worker admission."""
+
+    label: str
+    evidence_cache_hit: bool
+
+
+@dataclass(frozen=True)
+class ApplicationQueueState:
+    """Observable queue state for one application."""
+
+    label: str
+    status: Literal["queued", "running", "prepared", "needs_input", "failed", "cancelled"]
+    kind: Literal["queue", "active", "terminal"]
+    attempt: int
+    slots: int = 0
+    parallel_group: str | None = None
+
+
+@dataclass(frozen=True)
+class StageRetry:
+    """A stage-only retry directive returned by the queue coordinator."""
+
+    label: str
+    stage: str
+    attempt: int
+    run_id: str
+    ledger_path: str
+    preserve_artifacts: bool = True
+
+
+TerminalStatus = Literal["prepared", "needs_input", "failed", "cancelled"]
+_TERMINAL_STATUSES = frozenset({"prepared", "needs_input", "failed", "cancelled"})
 
 
 class CapacityScheduler:
@@ -94,3 +132,158 @@ class CapacityScheduler:
         reserve the mapper.
         """
         return WorkflowDemand(evidence=0 if evidence_cache_hit else 1)
+
+
+class ApplicationQueueCoordinator:
+    """Admit complete applications only when nested capacity is reserved.
+
+    This class deliberately does not launch agents or access external systems.
+    A caller submits an item, launches every item returned by ``enqueue`` or
+    ``complete``, and reports terminal results back through ``complete``.
+    Keeping admission separate from launching makes oversubscription
+    impossible for coordinators that follow the contract.
+    """
+
+    def __init__(
+        self,
+        capacity: int = 6,
+        max_concurrent_applications: int = 1,
+        *,
+        ledger_path_factory: Callable[[str, str, int], str] | None = None,
+    ) -> None:
+        if max_concurrent_applications < 1:
+            raise ValueError("max_concurrent_applications must be positive")
+        self.scheduler = CapacityScheduler(capacity)
+        self.max_concurrent_applications = max_concurrent_applications
+        self._ledger_path_factory = ledger_path_factory
+        self._pending: Deque[ApplicationQueueItem] = deque()
+        self._items: dict[str, ApplicationQueueItem] = {}
+        self._states: dict[str, ApplicationQueueState] = {}
+        self._leases: dict[str, WorkflowLease] = {}
+        self._attempts: dict[str, int] = {}
+        self._lock = Lock()
+
+    @property
+    def queued(self) -> tuple[ApplicationQueueState, ...]:
+        with self._lock:
+            return tuple(state for state in self._states.values() if state.status == "queued")
+
+    @property
+    def active(self) -> tuple[ApplicationQueueState, ...]:
+        with self._lock:
+            return tuple(state for state in self._states.values() if state.status == "running")
+
+    def state(self, label: str) -> ApplicationQueueState:
+        with self._lock:
+            try:
+                return self._states[label]
+            except KeyError as exc:
+                raise ValueError(f"unknown application: {label}") from exc
+
+    def enqueue(self, item: ApplicationQueueItem) -> tuple[ApplicationQueueItem, ...]:
+        """Queue an item and return only items safe to launch immediately."""
+        if not item.label:
+            raise ValueError("application label is required")
+        with self._lock:
+            if item.label in self._items:
+                raise ValueError(f"application already queued: {item.label}")
+            self._items[item.label] = item
+            self._attempts[item.label] = 1
+            demand = self.scheduler.demand_for(evidence_cache_hit=item.evidence_cache_hit)
+            self._states[item.label] = ApplicationQueueState(
+                label=item.label,
+                status="queued",
+                kind="queue",
+                attempt=1,
+                slots=demand.slots,
+                parallel_group="application-queue",
+            )
+            self._pending.append(item)
+            return self._drain_locked()
+
+    def complete(self, label: str, status: TerminalStatus) -> tuple[ApplicationQueueItem, ...]:
+        """Release a running lease and return the next items safe to launch."""
+        if status not in _TERMINAL_STATUSES:
+            raise ValueError(f"invalid terminal status: {status}")
+        with self._lock:
+            if label not in self._items:
+                raise ValueError(f"unknown application: {label}")
+            if label not in self._leases:
+                raise ValueError(f"application is not running: {label}")
+            lease = self._leases.pop(label)
+            self.scheduler.release(lease)
+            state = self._states[label]
+            self._states[label] = ApplicationQueueState(
+                label=label,
+                status=status,
+                kind="terminal",
+                attempt=state.attempt,
+                slots=state.slots,
+                parallel_group=state.parallel_group,
+            )
+            return self._drain_locked()
+
+    def retry_stage(
+        self,
+        label: str,
+        stage: str,
+        *,
+        ledger_finalized: bool,
+        current_run_id: str | None = None,
+        current_ledger_path: str | None = None,
+        new_run_id: str | None = None,
+    ) -> StageRetry:
+        """Return a stage-only retry with a fresh ledger when required.
+
+        Finalized ledgers are immutable.  A caller must configure a ledger path
+        factory when a finalized run needs to be resumed; the retry never
+        reopens or appends to the old ledger.
+        """
+        if not stage:
+            raise ValueError("retry stage is required")
+        with self._lock:
+            if label not in self._items:
+                raise ValueError(f"unknown application: {label}")
+            if self._states[label].status not in {"failed", "needs_input"}:
+                raise ValueError("only failed or needs_input applications can be retried")
+            attempt = self._attempts[label] + 1
+            old_run_id = current_run_id or label
+            if ledger_finalized:
+                if self._ledger_path_factory is None:
+                    raise ValueError("ledger_path_factory is required for finalized-ledger retries")
+                run_id = new_run_id or (f"{label}-attempt-{attempt}-{uuid4().hex[:8]}")
+                ledger_path = self._ledger_path_factory(label, run_id, attempt)
+            else:
+                run_id = old_run_id
+                if current_ledger_path:
+                    ledger_path = current_ledger_path
+                elif self._ledger_path_factory is not None:
+                    ledger_path = self._ledger_path_factory(label, old_run_id, attempt)
+                else:
+                    raise ValueError(
+                        "current_ledger_path or ledger_path_factory is required for ledger retries"
+                    )
+            self._attempts[label] = attempt
+            return StageRetry(label, stage, attempt, run_id, ledger_path)
+
+    def _drain_locked(self) -> tuple[ApplicationQueueItem, ...]:
+        started: list[ApplicationQueueItem] = []
+        while self._pending and len(self._leases) < self.max_concurrent_applications:
+            item = self._pending.popleft()
+            demand = self.scheduler.demand_for(evidence_cache_hit=item.evidence_cache_hit)
+            lease = self.scheduler.try_acquire(item.label, demand)
+            if lease is None:
+                self._pending.appendleft(item)
+                break
+            self._leases[item.label] = lease
+            state = self._states[item.label]
+            self._states[item.label] = ApplicationQueueState(
+                label=item.label,
+                status="running",
+                kind="active",
+                attempt=state.attempt,
+                slots=lease.slots,
+                parallel_group="application-pipeline",
+            )
+            started.append(item)
+        return tuple(started)

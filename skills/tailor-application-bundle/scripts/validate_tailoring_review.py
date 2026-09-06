@@ -43,41 +43,60 @@ def validate(review: dict[str, Any], template: dict[str, Any]) -> list[str]:
     if review.get("schema_version") != 1:
         errors.append("schema_version must be 1")
     inputs = review.get("inputs")
-    if not isinstance(inputs, dict) or set(inputs) != set(template["inputs"]):
+    if not isinstance(inputs, dict):
         errors.append("inputs must match the template")
         return errors
+    required_keys = {"job_json", "job_sha256", "bundle_json", "bundle_sha256"}
+    if not required_keys.issubset(set(inputs)):
+        errors.append("inputs must match the template")
+        return errors
+
+    has_candidate_evidence = bool(inputs.get("candidate_evidence_json"))
     artifacts: dict[str, dict[str, Any]] = {}
-    pairs = (
+    pairs = [
         ("job_json", "job_sha256"),
-        ("candidate_evidence_json", "candidate_evidence_sha256"),
-        ("role_profiles_json", "role_profiles_sha256"),
         ("bundle_json", "bundle_sha256"),
-    )
+    ]
+    if has_candidate_evidence:
+        pairs.extend([
+            ("candidate_evidence_json", "candidate_evidence_sha256"),
+            ("role_profiles_json", "role_profiles_sha256"),
+        ])
     for path_key, hash_key in pairs:
         try:
-            path = Path(inputs[path_key]).expanduser().resolve()
+            raw_path = inputs.get(path_key)
+            if not raw_path:
+                errors.append(f"{path_key} is required")
+                continue
+            path = Path(raw_path).expanduser().resolve()
             if not path.is_file():
                 errors.append(f"{path_key} does not exist")
                 continue
             data = path.read_bytes()
-            if hashlib.sha256(data).hexdigest() != inputs[hash_key]:
+            if inputs.get(hash_key) and hashlib.sha256(data).hexdigest() != inputs[hash_key]:
                 errors.append(f"{hash_key} does not match {path_key}")
                 continue
             artifacts[path_key] = load_bytes(data, path)
         except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
             errors.append(f"cannot verify {path_key}: {exc}")
-    if set(artifacts) != {"job_json", "candidate_evidence_json", "role_profiles_json", "bundle_json"}:
+
+    expected_artifacts = {"job_json", "bundle_json"}
+    if has_candidate_evidence:
+        expected_artifacts.update({"candidate_evidence_json", "role_profiles_json"})
+    if set(artifacts) != expected_artifacts:
         return errors
 
     bundle_inputs = artifacts["bundle_json"].get("inputs")
     if not isinstance(bundle_inputs, dict):
         errors.append("bundle inputs are missing or invalid")
     else:
-        for path_key, hash_key in (
-            ("job_json", "job_sha256"),
-            ("candidate_evidence_json", "candidate_evidence_sha256"),
-            ("role_profiles_json", "role_profiles_sha256"),
-        ):
+        check_pairs = [("job_json", "job_sha256")]
+        if has_candidate_evidence:
+            check_pairs.extend([
+                ("candidate_evidence_json", "candidate_evidence_sha256"),
+                ("role_profiles_json", "role_profiles_sha256"),
+            ])
+        for path_key, hash_key in check_pairs:
             try:
                 review_path = str(Path(inputs[path_key]).expanduser().resolve())
                 bundle_path = str(Path(bundle_inputs[path_key]).expanduser().resolve())
@@ -97,11 +116,13 @@ def validate(review: dict[str, Any], template: dict[str, Any]) -> list[str]:
         if not isinstance(checks.get(name), bool):
             errors.append(f"checks.{name} must be boolean")
 
-    candidate_ids = {
-        fact.get("id")
-        for fact in artifacts["candidate_evidence_json"].get("facts", [])
-        if isinstance(fact, dict) and nonempty(fact.get("id"))
-    }
+    candidate_ids: set[str] = set()
+    if has_candidate_evidence and "candidate_evidence_json" in artifacts:
+        candidate_ids = {
+            fact.get("id")
+            for fact in artifacts["candidate_evidence_json"].get("facts", [])
+            if isinstance(fact, dict) and nonempty(fact.get("id"))
+        }
     job_keys = set(artifacts["job_json"].get("field_evidence", {}))
     findings = review.get("findings")
     error_findings = 0
@@ -124,7 +145,9 @@ def validate(review: dict[str, Any], template: dict[str, Any]) -> list[str]:
                 value = finding.get(field)
                 if not isinstance(value, list) or any(not nonempty(item) for item in value):
                     errors.append(f"{label}.{field} must be a string array")
-                elif set(value) - known:
+                elif has_candidate_evidence and field == "candidate_evidence_ids" and (set(value) - known):
+                    errors.append(f"{label}.{field} contains unknown references")
+                elif field == "job_evidence_keys" and (set(value) - known):
                     errors.append(f"{label}.{field} contains unknown references")
 
     verdict = review.get("verdict")

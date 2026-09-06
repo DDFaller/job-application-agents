@@ -12,7 +12,7 @@ from ..auto_apply.matcher import JobMatchScorer
 
 def canonical_job_key(job: dict[str, Any]) -> str:
     """Return a stable deduplication key without trusting display text alone."""
-    url = job.get("canonical_url") or job.get("source_url") or job.get("job_url")
+    url = job.get("application_url") or job.get("canonical_url") or job.get("source_url") or job.get("job_url")
     source_id = job.get("source_job_id") or job.get("job_id")
     if url:
         return f"url:{str(url).strip().lower().rstrip('/')}"
@@ -69,7 +69,7 @@ def rank_jobs(
                 "role": payload.get("role") or payload.get("job_title"),
                 "location": payload.get("location"),
                 "source": payload.get("source"),
-                "canonical_url": payload.get("canonical_url") or payload.get("source_url"),
+                "canonical_url": payload.get("application_url") or payload.get("canonical_url") or payload.get("source_url"),
                 "source_job_id": payload.get("source_job_id"),
                 "score": score.total_score,
                 "rating": score.rating,

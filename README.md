@@ -1,6 +1,9 @@
 # Job Application Agents
 
-Prepare evidence-backed CVs and motivation letters with Codex. The plugin uses several specialized agents in parallel, renders editable LaTeX sources and PDFs, and can track successful bundles in Notion. It never submits applications.
+Prepare evidence-backed CVs and motivation letters with Codex. A durable
+controller runs one isolated Agent Deck session per semantic stage, renders
+editable LaTeX sources and PDFs, and can track successful bundles in Notion.
+It never submits applications.
 
 ## Recommended installation
 
@@ -8,6 +11,8 @@ This is the easiest installation path for a new user on Linux or macOS. You need
 
 - Git and Python 3;
 - the Codex CLI, already signed in;
+- Agent Deck for the default managed executor (a direct-process fallback is available);
+- OpenCode is supported as a supervised worker harness inside Agent Deck;
 - Docker with Docker Compose;
 - the local LaTeX toolchain: `latexmk`, XeLaTeX, `kpsewhich`, and Poppler.
 
@@ -35,6 +40,7 @@ Setup then:
 
 - detects missing local LaTeX tools and offers to install them with the detected package manager;
 - creates the private working directory `~/Documents/job-search`;
+- persists that canonical root outside the repository so workers cannot fall back to a shadow copy;
 - installs the Python render-service client into `.venv`;
 - verifies the local LaTeX toolchain used by VS Code LaTeX Workshop and local rendering;
 - offers to start the local Firestore emulator and isolated XeLaTeX worker;
@@ -97,7 +103,11 @@ Live mode mounts the ADC file read-only into the worker. Do not commit credentia
 
 Start Codex against the same live project with `python3 scripts/launch.py --live`. Without `--live`, the launcher always selects the isolated local emulator. The launcher passes only the selected repository and private data root; it does not forward integration tokens to child agents.
 
-Restart Codex or start a new Codex session so it loads the plugin. From the cloned repository, the recommended launcher gives Codex access to the application data directory and enables up to six concurrent workers. A complete cache-miss application reserves five of those workers (including the constrained Humanizer pass) and the default concurrency guard runs one complete application at a time. Integration credentials are kept out of worker environments.
+Restart Codex or start a new Codex session so it loads the plugin. The launcher
+gives the coordinator access to the private data root and defaults to three
+active jobs. Each job has only one active stage; candidate evidence is built
+once per batch and reused. Integration credentials are removed from worker
+environments.
 
 ```bash
 python3 scripts/launch.py
@@ -115,7 +125,51 @@ After approving that evidence library, start an application with:
 Prepare this job application: https://example.com/public-job
 ```
 
-The coordinator uses specialized agents in parallel, reports every major stage, and sends a heartbeat at least every 45 seconds while work is active.
+The coordinator advances isolated stages across jobs in parallel, reports each
+transition, and sends a heartbeat at least every 45 seconds. For an explicit
+batch JSON file (which can simply be a list of job URLs `["https://...", ...]`,
+or objects containing `key` and `opening_url`), the same controller is
+available directly:
+
+```bash
+python3 scripts/run_application_batch.py --jobs jobs.json \
+  --data-root ~/Documents/job-search --harness codex --model gpt-5.6-luna
+```
+
+Use `--state <batch.json>` to resume, `--cancel` to stop unfinished jobs, or
+`--profiles profiles.json` for stage-specific harness/model settings.
+The profiles file maps the six stage profile names to provider-neutral worker
+settings, for example:
+
+```json
+{
+  "extractor": {"harness": "codex", "model": "gpt-5.6-luna", "effort": "low"},
+  "mapper": {"harness": "codex", "model": "gpt-5.6-luna", "effort": "low"},
+  "writer": {"harness": "codex", "model": "gpt-5.6-luna", "effort": "medium"},
+  "humanizer": {"harness": "codex", "model": "gpt-5.6-luna", "effort": "low"},
+  "reviewer": {"harness": "codex", "model": "gpt-5.6-luna", "effort": "medium"},
+  "renderer": {"harness": "codex", "model": "gpt-5.6-luna", "effort": "low"}
+}
+```
+
+For supervised OpenCode workers, use an OpenCode `provider/model` value such
+as `opencode/big-pickle`. Agent Deck owns the durable stage session while
+OpenCode performs the isolated stage. Set `OPENCODE_BIN` when the executable is
+not on PATH; the launcher also checks `~/.opencode/bin/opencode`.
+
+```bash
+OPENCODE_BIN=/home/falluba/.opencode/bin/opencode \
+python3 scripts/run_application_batch.py --jobs jobs.json \
+  --data-root ~/Documents/job-search --harness opencode \
+  --model opencode/big-pickle --no-interactive
+```
+
+The single-opening pilot inputs are provided in
+`examples/harmattan-ai-4311177547.jobs.json` and
+`examples/opencode-supervised-profiles.json`.
+
+For Agy Claude models, omit `effort`; the launcher rejects that unsupported
+combination before creating a session.
 
 ### Updating an existing installation
 
@@ -293,6 +347,39 @@ See [the complete workflow](docs/job-application-workflow.md) for validation, re
 ## Privacy and safety
 
 Candidate sources and generated applications stay under `~/Documents/job-search` by default and must not be committed. The plugin never invents candidate facts, bypasses portal access controls, or contacts an employer. Application preparation is hands-off and cannot submit. Browser form filling defaults to dry-run; a separately enabled submission deployment additionally requires interactive user confirmation, and `APPLIED` is recorded only after a verified submission receipt.
+
+## Phone-based application review
+
+The local Playwright reviewer keeps one application in a durable, encrypted
+checkpoint while a human reviews the current form step from a phone. It is
+disabled unless started explicitly:
+
+```bash
+export JAA_ENABLE_SUBMISSION=I_UNDERSTAND_SUBMISSION  # only if final submit is intended
+.venv/bin/python scripts/phone_review.py \
+  --app-dir ~/Documents/job-search/applications/company/role/job \
+  --host 0.0.0.0 \
+  --allow-submit
+```
+
+The command prints a private review token. On a computer and phone joined to
+the same Tailscale network, publish the local port privately with:
+
+```bash
+tailscale serve --https=443 http://127.0.0.1:8765
+```
+
+Open the resulting Tailscale URL on the phone and enter the token. The phone
+shows the current step, prefilled values, field attribution, and document
+links. `Approve step` advances exactly one step, while `Skip` preserves the
+encrypted checkpoint. Browser profile state and the last page URL are retained
+under the application package's `.review/` directory so a restart can resume.
+
+The service pauses on login, CAPTCHA, or missing navigation controls. Resolve
+the issue in the visible desktop browser and press `Resume` on the phone. A
+final submit is only accepted when both `--allow-submit` and the explicit
+`JAA_ENABLE_SUBMISSION` gate are present; stale revisions and hash mismatches
+are rejected.
 
 ## License
 

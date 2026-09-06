@@ -5,6 +5,13 @@ description: Read-only resolution and validation of the canonical approved role-
 
 # Resolve Approved Role Profile
 
+> [!NOTE]
+> **Legacy / Backward-Compatibility Skill**:
+> In the modern role-profile architecture, candidate role profiles are directly organized as
+> folders under `<data-root>/sources/<role-profile>/` and resolved at runtime via
+> `job_application_agents.sources.list_role_profiles()` and `match_role_profile()`.
+> This resolver is retained for legacy catalogs compiled from `master-curriculum/profiles`.
+
 This is the application-time read-only contract for role profiles. It is
 separate from `$maintain-master-curriculum`, which owns all curriculum and
 profile writes, proposals, reviews, approvals, and publication.
@@ -14,7 +21,7 @@ profile writes, proposals, reviews, approvals, and publication.
 Require an explicit absolute data root. Run:
 
 ```bash
-python3 skills/resolve-approved-role-profile/scripts/resolve_approved_role_profile.py \
+/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/skills/resolve-approved-role-profile/scripts/resolve_approved_role_profile.py \
   --data-root <data-root>
 ```
 

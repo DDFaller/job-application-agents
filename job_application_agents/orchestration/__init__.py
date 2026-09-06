@@ -1,5 +1,43 @@
-"""Small, dependency-free helpers for coordinating application workflows."""
+"""Durable, provider-neutral coordination for application workflows."""
 
-from .scheduler import CapacityScheduler, WorkflowDemand, WorkflowLease
+from .contracts import (
+    ArtifactReference,
+    StageBlocker,
+    StageResult,
+    StageTask,
+    WorkerProfile,
+)
+from .executors import (
+    AgentDeckExecutor,
+    ExecutionHandle,
+    ExecutionObservation,
+    LocalProcessExecutor,
+    TmuxExecutor,
+)
+from .controller import (
+    BatchController,
+    BatchPreflight,
+    DEFAULT_APPLICATION_STAGES,
+    JobSpec,
+    StageDefinition,
+    WorkflowLedger,
+)
 
-__all__ = ["CapacityScheduler", "WorkflowDemand", "WorkflowLease"]
+__all__ = [
+    "AgentDeckExecutor",
+    "ArtifactReference",
+    "BatchController",
+    "BatchPreflight",
+    "DEFAULT_APPLICATION_STAGES",
+    "ExecutionHandle",
+    "ExecutionObservation",
+    "LocalProcessExecutor",
+    "JobSpec",
+    "StageBlocker",
+    "StageDefinition",
+    "StageResult",
+    "StageTask",
+    "TmuxExecutor",
+    "WorkflowLedger",
+    "WorkerProfile",
+]

@@ -11,6 +11,7 @@ from .models import NotionCardPayload
 DEFAULT_NOTION_VERSION = "2022-06-28"
 DEFAULT_BASE_URL = "https://api.notion.com/v1"
 STATUS_OPTIONS = [
+    {"name": "EXTRACTED", "color": "gray"},
     {"name": "TO_APPLY", "color": "blue"},
     {"name": "APPLIED", "color": "yellow"},
     {"name": "REAPPLY", "color": "orange"},
@@ -182,6 +183,10 @@ class NotionClient:
             properties["Source"] = {"select": {"name": payload.source}}
         if payload.job_url:
             properties["Job URL"] = {"url": payload.job_url[:2000]}
+        if payload.source_url:
+            properties["Source URL"] = {"url": payload.source_url[:2000]}
+        if payload.application_url:
+            properties["Application URL"] = {"url": payload.application_url[:2000]}
         if payload.source_job_id:
             properties["Source Job ID"] = {"rich_text": self._safe_rich_text(payload.source_job_id)}
         if payload.application_id:
@@ -390,6 +395,8 @@ class NotionClient:
                     "properties": {
                         "Match Score": {"number": {"format": "number"}},
                         "Application ID": {"rich_text": {}},
+                        "Source URL": {"url": {}},
+                        "Application URL": {"url": {}},
                         "Status": {"select": {"options": STATUS_OPTIONS}},
                     }
                 },
@@ -537,6 +544,48 @@ class NotionClient:
             if url_value == job_url:
                 return page
         return None
+
+    def find_card_by_identity(
+        self,
+        database_id: str,
+        *,
+        job_url: str | None = None,
+        source_url: str | None = None,
+        source_job_id: str | None = None,
+        company: str | None = None,
+        role: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Find a card through actionable URL, source URL, or stable job identity."""
+        pages = self.warm_database(database_id)
+        for page in pages:
+            properties = page.get("properties", {})
+            urls = {
+                "Job URL": (properties.get("Job URL") or {}).get("url"),
+                "Application URL": (properties.get("Application URL") or {}).get("url"),
+                "Source URL": (properties.get("Source URL") or {}).get("url"),
+            }
+            if job_url and job_url in urls.values():
+                return page
+            if source_url and source_url in urls.values():
+                return page
+            if source_job_id:
+                stored_id = self._property_text(properties.get("Source Job ID"))
+                stored_company = self._property_text(properties.get("Company"))
+                stored_role = self._property_text(properties.get("Role"))
+                if stored_id == source_job_id and stored_company == company and stored_role == role:
+                    return page
+        return None
+
+    @staticmethod
+    def _property_text(property_value: dict[str, Any] | None) -> str | None:
+        if not isinstance(property_value, dict):
+            return None
+        kind = property_value.get("type")
+        values = property_value.get(kind) if kind else None
+        if not isinstance(values, list):
+            return None
+        text = "".join(str(item.get("plain_text", "")) for item in values if isinstance(item, dict))
+        return text or None
 
     def add_comment(self, page_id: str, comment_text: str) -> dict[str, Any]:
         """Post a comment to a Notion page."""

@@ -10,7 +10,7 @@ description: Generate a self-contained offline HTML dashboard from local or Fire
    a system of record.
 2. Normalize legacy statuses and missing fields without dropping records.
    Exclude unsubmitted drafts from submitted-application funnel rates.
-3. Run `scripts/generate_application_report.py`; it uses the shared helper,
+3. Run `/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/scripts/generate_application_report.py`; it uses the shared helper,
    escapes all HTML values, and writes one dependency-free HTML file.
 4. Include report inputs, generation timestamp, status/sector/channel
    breakdowns, interview progression, score distribution where available,

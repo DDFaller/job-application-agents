@@ -47,8 +47,8 @@ The filename convention constitutes approval for application rendering. The rend
 Examples:
 
 ```bash
-scripts/render_bundle.py --stage --bundle-json bundle.json --application-root applications/acme/role/id --profile auto
-scripts/render_bundle.py --stage --bundle-json bundle.json --application-root applications/acme/role/id --profile france --photo ~/Documents/job-search/sources/profile-photo.jpg
-scripts/render_bundle.py --stage --bundle-json bundle.json --application-root applications/acme/role/id --template compact-modern
-scripts/render_bundle.py --promote applications/acme/role/id/.staging/bundle-abc123 --review-json tailoring-review.json --application-root applications/acme/role/id
+/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/skills/tailor-application-bundle/scripts/render_bundle.py --stage --bundle-json bundle.json --application-root <data-root>/applications/acme/role/id --profile auto
+/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/skills/tailor-application-bundle/scripts/render_bundle.py --stage --bundle-json bundle.json --application-root <data-root>/applications/acme/role/id --profile france --photo ~/Documents/job-search/sources/profile-photo.jpg
+/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/skills/tailor-application-bundle/scripts/render_bundle.py --stage --bundle-json bundle.json --application-root <data-root>/applications/acme/role/id --template compact-modern
+/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/skills/tailor-application-bundle/scripts/render_bundle.py --promote <data-root>/applications/acme/role/id/.staging/bundle-abc123 --review-json tailoring-review.json --application-root <data-root>/applications/acme/role/id
 ```

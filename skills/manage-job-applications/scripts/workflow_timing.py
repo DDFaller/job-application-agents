@@ -16,6 +16,8 @@ from typing import Any
 SCHEMA_VERSION = 2
 STATUS_HEARTBEAT_SECONDS = 45
 EVENT_KINDS = ("active", "wait", "queue", "remote")
+TERMINAL_RUN_STATUSES = ("prepared", "needs_input", "failed", "cancelled")
+RUN_STATUSES = ("running",) + TERMINAL_RUN_STATUSES
 
 
 def now() -> datetime:
@@ -52,6 +54,8 @@ def load(path: Path) -> dict[str, Any]:
 def integrity_errors(record: dict[str, Any]) -> list[str]:
     """Return deterministic errors for impossible or tampered timelines."""
     errors: list[str] = []
+    if record.get("status") not in RUN_STATUSES:
+        errors.append(f"invalid run status: {record.get('status')}")
     try:
         started = parse_time(record["started_at"])
         ended = parse_time(record["ended_at"]) if record.get("ended_at") else None
@@ -71,6 +75,8 @@ def integrity_errors(record: dict[str, Any]) -> list[str]:
         except (KeyError, TypeError, ValueError) as exc:
             errors.append(f"{event_id}: invalid timestamps: {exc}")
             continue
+        if event_started < started:
+            errors.append(f"{event_id}: starts before run started")
         if ended and event_ended is None:
             errors.append(f"{event_id}: event is still running after run ended")
         if ended and event_started > ended:
@@ -127,6 +133,8 @@ def start_event(path: Path, event_id: str, skill: str, stage: str,
 
 def finish_event(path: Path, event_id: str, status: str, details: str | None) -> None:
     record = load(path)
+    if record.get("ended_at") is not None:
+        raise ValueError("cannot finish an event after the run is finalized")
     event = next((item for item in record["events"] if item["event_id"] == event_id), None)
     if event is None:
         raise ValueError(f"unknown event: {event_id}")
@@ -144,6 +152,10 @@ def finish_event(path: Path, event_id: str, status: str, details: str | None) ->
 
 def finalize(path: Path, status: str, application_root: str | None,
              version_directory: str | None) -> None:
+    if status not in TERMINAL_RUN_STATUSES:
+        raise ValueError(
+            "run can only be finalized as: " + ", ".join(TERMINAL_RUN_STATUSES)
+        )
     record = load(path)
     ended = now()
     for event in record.get("events", []):
@@ -252,7 +264,7 @@ def parser() -> argparse.ArgumentParser:
     finish_parser.add_argument("--details")
     end_parser = sub.add_parser("finalize")
     end_parser.add_argument("--file", type=Path, required=True)
-    end_parser.add_argument("--status", required=True)
+    end_parser.add_argument("--status", choices=TERMINAL_RUN_STATUSES, required=True)
     end_parser.add_argument("--application-root")
     end_parser.add_argument("--version-directory")
     report_parser = sub.add_parser("report")

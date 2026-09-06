@@ -1,59 +1,49 @@
-# Agent Skills & Orchestration Architecture
+# Agent Skills and Orchestration Architecture
 
-The **Agent Skills Subsystem** (`skills/`) contains specialized prompt-engineered capabilities that enable Codex and its clean-context workers to orchestrate end-to-end job applications with strict truthfulness, quality gates, and evidence verification.
-
----
-
-## 1. Agent Skill Pipeline
+The application pipeline uses a flat, durable control plane. Skills define one
+semantic operation; they do not form a tree of agents.
 
 ```mermaid
-graph TD
-    UserReq[User: Target Job URL / Text] --> Manage[manage-job-applications]
-    Manage --> Rank[rank-job-shortlist]
-    Manage --> Lifecycle[outcomes / interview / email]
-
-    Manage --> Prepare[prepare-job-application]
-
-    Prepare --> Extract[extract-job-opening<br>• Clean-context Luna subagent<br>• Produces normalized job.json]
-
-    Prepare --> Curriculum[maintain-master-curriculum<br>• Audits candidate facts<br>• Matches approved role-profile]
-
-    Prepare --> Tailor[tailor-application-bundle<br>• XeLaTeX source generation<br>• Quality gate pdftotext/grep validation]
-    Tailor --> Humanize[humanize-application-copy<br>• CV summary + letter only<br>• Receipt-backed constrained merge]
-
-    Prepare --> Track[notion-track-application<br>• Triggers live board card<br>• Uploads PDF & sources.zip]
+flowchart LR
+  Q[Notion/public queue] --> C[BatchController\nsingle state writer]
+  P[Global preflight\ncanonical evidence + profiles] --> C
+  C --> E[Agent Deck: extraction]
+  E --> M[Agent Deck: evidence mapping]
+  M --> W[Agent Deck: bundle writing]
+  W --> H[Agent Deck: Humanizer]
+  H --> R[Agent Deck: independent review]
+  R --> X[Agent Deck: deterministic render]
+  X --> N[Controller Notion connector]
 ```
 
----
+## Ownership
 
-## 2. Skill Inventory
+The controller owns the job DAG, concurrency, Agent Deck session lifecycle,
+attempt numbers, retries, batch state, and timing ledgers. It resolves one
+explicit private data root and performs shared preflight before model use.
+Only it may use authenticated integrations.
 
-| Skill | Directory | Core Function |
-|---|---|---|
-| **`prepare-job-application`** | [`skills/prepare-job-application`](file:///home/falluba/job-application-agents/skills/prepare-job-application/SKILL.md) | Master orchestrator coordinating extraction, role matching, document generation, and tracking. |
-| **`extract-job-opening`** | [`skills/extract-job-opening`](file:///home/falluba/job-application-agents/skills/extract-job-opening/SKILL.md) | Retrieves public postings into Schema v2 `job.json` and verbatim `source.md`. |
-| **`maintain-master-curriculum`** | [`skills/maintain-master-curriculum`](file:///home/falluba/job-application-agents/skills/maintain-master-curriculum/SKILL.md) | Manages canonical markdown evidence library and evidence-backed role profiles. |
-| **`tailor-application-bundle`** | [`skills/tailor-application-bundle`](file:///home/falluba/job-application-agents/skills/tailor-application-bundle/SKILL.md) | Produces tailored resume/letter `.tex` sources, validates compile quality, and emits match analysis. |
-| **`humanize-application-copy`** | [`skills/humanize-application-copy`](file:///home/falluba/job-application-agents/skills/humanize-application-copy/SKILL.md) | Humanizes only the CV profile summary and motivation-letter paragraphs with receipt-backed constrained rewrites. |
-| **`notion-track-application`** | [`skills/notion-track-application`](file:///home/falluba/job-application-agents/skills/notion-track-application/SKILL.md) | Creates and updates live Kanban cards on Notion with attached PDFs. |
-| **`manage-job-applications`** | [`skills/manage-job-applications`](file:///home/falluba/job-application-agents/skills/manage-job-applications/SKILL.md) | Coordinates multiple applications, reviews boards, and delegates worker tasks. |
-| **`automate-job-application`** | [`skills/automate-job-application`](file:///home/falluba/job-application-agents/skills/automate-job-application/SKILL.md) | Token-optimized DOM inspection and safe, gated form review. |
-| **`add-latex-template`** | [`skills/add-latex-template`](file:///home/falluba/job-application-agents/skills/add-latex-template/SKILL.md) | Adapts and installs XeLaTeX résumé templates for dynamic slot rendering. |
-| **`onboard-job-search`** | [`skills/onboard-job-search`](file:///home/falluba/job-application-agents/skills/onboard-job-search/SKILL.md) | Sets up evidence-backed candidate facts and search preferences. |
-| **`rank-job-shortlist`** | [`skills/rank-job-shortlist`](file:///home/falluba/job-application-agents/skills/rank-job-shortlist/SKILL.md) | Batch-scores, deduplicates, and prioritizes public openings. |
-| **`track-application-outcome`** | [`skills/track-application-outcome`](file:///home/falluba/job-application-agents/skills/track-application-outcome/SKILL.md) | Records lifecycle events and drafts follow-ups. |
-| **`sync-application-email`** | [`skills/sync-application-email`](file:///home/falluba/job-application-agents/skills/sync-application-email/SKILL.md) | Proposes source-cited email status updates. |
-| **`prepare-interview`** | [`skills/prepare-interview`](file:///home/falluba/job-application-agents/skills/prepare-interview/SKILL.md) | Builds stage-specific interview preparation. |
-| **`expand-candidate-profile`** | [`skills/expand-candidate-profile`](file:///home/falluba/job-application-agents/skills/expand-candidate-profile/SKILL.md) | Finds additive evidence in supplied and linked sources. |
-| **`plan-upskilling`** | [`skills/plan-upskilling`](file:///home/falluba/job-application-agents/skills/plan-upskilling/SKILL.md) | Converts recurring job gaps into a learning plan. |
-| **`generate-application-report`** | [`skills/generate-application-report`](file:///home/falluba/job-application-agents/skills/generate-application-report/SKILL.md) | Produces a derived offline HTML dashboard. |
-| **`sync-job-pipeline-view`** | [`skills/sync-job-pipeline-view`](file:///home/falluba/job-application-agents/skills/sync-job-pipeline-view/SKILL.md) | Publishes a one-way Notion presentation view. |
-| **`add-job-portal`** | [`skills/add-job-portal`](file:///home/falluba/job-application-agents/skills/add-job-portal/SKILL.md) | Generates public market-specific portal adapters. |
+Agent Deck is the default managed executor. A direct-process executor supports
+the same task/result contracts for local automation. Provider-specific flags
+are isolated in `orchestration.worker_command`: Agy uses one-shot `--print`,
+all harnesses receive the data root explicitly, and unsupported model flags are
+rejected before launch.
 
+## Failure model
 
----
+A missing or invalid result contract is a stage failure even if a session is
+idle. Retryable failures create a fresh session and attempt directory for only
+that stage while preserving validated upstream artifacts. Non-retryable
+blockers become `needs_input`; profile maintenance is a separate explicit
+workflow. Finalized ledgers are immutable.
 
-## 3. Strict Truthfulness & Quality Rules
-1. **Never Invent Candidate Facts**: All statements in resumes and letters must be strictly backed by master curriculum evidence files.
-2. **Deterministic Quality Gates**: Compiled documents are verified via `pdftotext` and keyword assertions before tracking.
-3. **Hands-off by Default**: The pipeline prepares editable application packages and does not invoke auto-apply, enqueue submission jobs, or promote `APPLIED`. Submission tooling is separately gated by explicit deployment configuration and interactive confirmation.
+## Data and security
+
+Resolution order is explicit `--data-root`, `JAA_DATA_ROOT`, then user config;
+there is no `./job-search` fallback. Repository overlap is rejected. Setup
+persists the selected root in `~/.config/job-application-agents/config.json`,
+and `/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/scripts/audit_data_roots.py` detects or explicitly quarantines old
+repository-local shadows.
+
+The pipeline prepares reviewable drafts only. It never submits applications,
+contacts employers, invokes auto-apply, or marks records `APPLIED`.

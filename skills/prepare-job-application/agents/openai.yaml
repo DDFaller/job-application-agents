@@ -1,11 +1,4 @@
 interface:
   display_name: "Prepare Job Application"
-  short_description: "Prepare one application with live progress"
-  default_prompt: "Use $prepare-job-application to prepare this opening from neutral facts and an approved role profile, with the editable geographic LaTeX template, independent review, live status, and Notion tracking."
-dependencies:
-  tools:
-    - type: "mcp"
-      value: "notion"
-      description: "Authenticated Notion workspace access"
-      transport: "streamable_http"
-      url: "https://mcp.notion.com/mcp"
+  short_description: "Define one flat application DAG"
+  default_prompt: "Use $prepare-job-application to validate the stage graph for this opening; the durable controller must launch each stage separately."

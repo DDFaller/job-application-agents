@@ -640,17 +640,26 @@ def verify_bundle_for_render(bundle_path: Path, skill_dir: Path) -> tuple[dict[s
         raise ValueError("bundle is not structurally valid: " + "; ".join(errors))
     inputs = bundle["inputs"]
     job_path = Path(inputs["job_json"]).expanduser().resolve()
-    evidence_path = Path(inputs["candidate_evidence_json"]).expanduser().resolve()
-    profiles_path = Path(inputs["role_profiles_json"]).expanduser().resolve()
     job_bytes = job_path.read_bytes()
-    evidence_bytes = evidence_path.read_bytes()
-    profiles_bytes = profiles_path.read_bytes()
-    if hashlib.sha256(job_bytes).hexdigest() != inputs["job_sha256"]:
+    if inputs.get("job_sha256") and hashlib.sha256(job_bytes).hexdigest() != inputs["job_sha256"]:
         raise ValueError("job input changed after bundle validation")
-    if hashlib.sha256(evidence_bytes).hexdigest() != inputs["candidate_evidence_sha256"]:
-        raise ValueError("candidate evidence changed after bundle validation")
-    if hashlib.sha256(profiles_bytes).hexdigest() != inputs["role_profiles_sha256"]:
-        raise ValueError("role profile catalog changed after bundle validation")
+
+    evidence_bytes = b"{}"
+    if inputs.get("candidate_evidence_json"):
+        evidence_path = Path(inputs["candidate_evidence_json"]).expanduser().resolve()
+        if evidence_path.is_file():
+            evidence_bytes = evidence_path.read_bytes()
+            if inputs.get("candidate_evidence_sha256") and hashlib.sha256(evidence_bytes).hexdigest() != inputs["candidate_evidence_sha256"]:
+                raise ValueError("candidate evidence changed after bundle validation")
+
+    profiles_bytes = b"{}"
+    if inputs.get("role_profiles_json"):
+        profiles_path = Path(inputs["role_profiles_json"]).expanduser().resolve()
+        if profiles_path.is_file():
+            profiles_bytes = profiles_path.read_bytes()
+            if inputs.get("role_profiles_sha256") and hashlib.sha256(profiles_bytes).hexdigest() != inputs["role_profiles_sha256"]:
+                raise ValueError("role profile catalog changed after bundle validation")
+
     return bundle, bundle_bytes, job_bytes, evidence_bytes, profiles_bytes
 
 

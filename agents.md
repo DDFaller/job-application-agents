@@ -11,7 +11,7 @@ graph TD
     User([User / Developer]) --> Agent[AI Coding Agent<br>Codex]
 
     subgraph Agent Skills Layer [1. Agent Skills & Prompts Layer]
-        Agent --> Skills[.agents/skills/<br>• prepare-job-application<br>• extract-job-opening<br>• tailor-application-bundle<br>• notion-track-application]
+        Agent --> Skills[skills/<br>• prepare-job-application<br>• extract-job-opening<br>• tailor-application-bundle<br>• notion-track-application]
     end
 
     subgraph Core Python Engine [2. Core Python Business Logic]
@@ -41,7 +41,7 @@ Each subsystem in the repository maintains its own dedicated `architecture.md` d
 
 | Subsystem | Location | Architecture Document | Core Responsibilities |
 |---|---|---|---|
-| **Agent Skills** | `.agents/skills/` | [`.agents/skills/architecture.md`](file:///home/falluba/job-application-agents/.agents/skills/architecture.md) | Prompt instructions, clean-context subagents, extraction, tailoring, and quality gates. |
+| **Agent Skills** | `skills/` | [`skills/architecture.md`](file:///home/falluba/job-application-agents/skills/architecture.md) | Prompt instructions, clean-context subagents, extraction, tailoring, and quality gates. |
 | **LaTeX Render Service** | `job_application_agents/render_service/` | [`render_service/architecture.md`](file:///home/falluba/job-application-agents/job_application_agents/render_service/architecture.md) | Content-addressed artifact store, XeLaTeX compilation engine, worker daemon, and HTTP server. |
 | **Firestore Cloud Sync** | `job_application_agents/sync/` | [`sync/architecture.md`](file:///home/falluba/job-application-agents/job_application_agents/sync/architecture.md) | Multi-tenant tenant isolation (`/users/{userId}`), version subcollections, bidirectional drift detection. |
 | **Notion Integration & Worker** | `job_application_agents/plugins/notion/` | [`plugins/notion/architecture.md`](file:///home/falluba/job-application-agents/job_application_agents/plugins/notion/architecture.md) | 2-step Notion file uploads, transactional queue leases, dynamic per-user database routing. |

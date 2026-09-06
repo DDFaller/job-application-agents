@@ -186,7 +186,9 @@ class NotionPlugin(DocumentSinkPlugin):
             location=job.get("location", ""),
             work_model=job.get("work_model", "Unspecified"),
             source=job.get("source", "Other ATS"),
-            job_url=job.get("url") or job.get("job_url"),
+            job_url=job.get("application_url") or job.get("canonical_url") or job.get("url") or job.get("job_url"),
+            source_url=job.get("source_url"),
+            application_url=job.get("application_url") or job.get("canonical_url") or job.get("url") or job.get("job_url"),
             source_job_id=job.get("job_id") or job.get("source_job_id") or application_id,
             current_version=version,
             generated_at=version_data.get("created_at") or application_data.get("updated_at"),
@@ -208,9 +210,16 @@ class NotionPlugin(DocumentSinkPlugin):
         # 3. Create or Update Card
         page_id = application_data.get("notion_page_id")
         existing_page: dict[str, Any] | None = None
-        if not page_id and payload.job_url:
-            existing_page = client.find_card_by_job_url(target_database_id, payload.job_url)
-            if existing_page:
+        if not page_id and (payload.job_url or payload.source_url):
+            existing_page = client.find_card_by_identity(
+                target_database_id,
+                job_url=payload.job_url,
+                source_url=payload.source_url,
+                source_job_id=payload.source_job_id,
+                company=payload.company,
+                role=payload.role,
+            )
+            if isinstance(existing_page, dict) and existing_page:
                 page_id = existing_page.get("id")
 
         if page_id:

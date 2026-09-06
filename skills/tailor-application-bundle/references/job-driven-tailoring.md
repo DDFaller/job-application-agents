@@ -1,9 +1,26 @@
 # Job-driven tailoring
 
-Treat the normalized opening as the selection lens and candidate evidence as the only source of candidate facts. Use the opening to change emphasis, not to erase stable CV context. Select an approved role profile first, then preserve compact baseline context and rank remaining job-specific evidence.
+Treat the normalized opening as the selection lens and the candidate's role-profile sources as the source of candidate facts. Use the opening to adjust emphasis and alignment, never to fabricate experience or distort stable CV context.
 
-## Approved profile selection
+## Role-profile sources workflow (Standard)
 
+In standard batches, candidate information is organized under `~/Documents/job-search/sources/<role-profile>/` with standard markdown files:
+- `identity.md` — name, headline, location, and verified contact/social URLs.
+- `experience.md` — work history, employer/client relationships, responsibilities, and achievements.
+- `education.md` — institutions, official degrees, specializations, and dates.
+- `skills.md` — technical, data, platform, and observability capabilities.
+- `projects.md` — standalone prototypes, hackathons, and technical projects.
+- `languages.md` — spoken languages and verified proficiency levels.
+- `pre-formatted.tex` — authoritative 1-page XeLaTeX CV reference demonstrating optimal phrasing, structure, formatting, and page-budget allocation.
+
+1. **Role Profile Selection**: The controller or agent resolves the matching profile folder (e.g., `backend-engineer`, `ai-platform-engineer`) using `job_application_agents.sources.match_role_profile()`.
+2. **Reference Alignment**: The author consults `pre-formatted.tex` for the profile to model section ordering, entry formats, and bullet phrasing.
+3. **Targeted Tailoring**: Select and prioritize the most relevant experience and skills for the opening, while preserving truthful baseline context (education, languages, core contact).
+4. **Validation**: The authored bundle is validated with `validate_bundle.py`. When candidate evidence is omitted, strict `E###` citation gates are bypassed while structural and document gates remain enforced.
+
+## Legacy approved profile selection (Schema-3 Reference)
+
+When running legacy batches with `candidate-evidence.json` and a compiled role-profile catalog:
 Use the role-profile catalog as a positioning boundary, never as candidate
 evidence. For every approved profile, map its stable `MC-*` facts through the
 candidate facts' `source_fact_ids`. Score every relevant mapped claim from `0`

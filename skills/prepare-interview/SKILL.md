@@ -12,12 +12,12 @@ description: Prepare for a specific interview from the exact submitted applicati
 3. Research the company/interviewers through verifiable public sources and
    separate sourced facts from preparation hypotheses.
 4. Delegate a clean-context preparation agent to produce a stage-specific
-   pack: role priorities, likely questions, STAR examples grounded in fact
-   IDs, honest bridge answers for gaps, interviewer questions, and a concise
+   pack: role priorities, likely questions, STAR examples grounded in the candidate's
+   role-profile sources (`sources/<role-profile>/`) and submitted application, honest bridge answers for gaps, interviewer questions, and a concise
    consistency checklist against submitted documents.
 5. Optionally run a supervised mock interview in chat. Record feedback only
    when the user asks; do not update application status automatically.
 
-Every answer must stay within the evidence library and the exact submitted
+Every answer must stay within the candidate sources and the exact submitted
 bundle. A missing competency gets an honest learning/transfer answer, never a
 fabricated example.

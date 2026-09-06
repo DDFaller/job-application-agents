@@ -87,7 +87,8 @@ class FormDOMPreprocessor:
 
         for (const el of elements) {
             // Ignore hidden or non-functional elements
-            if (el.type === 'hidden' || el.style.display === 'none' || el.style.visibility === 'hidden') {
+            if (el.type === 'hidden' || el.getAttribute('aria-hidden') === 'true' ||
+                el.style.display === 'none' || el.style.visibility === 'hidden') {
                 continue;
             }
 
@@ -99,15 +100,20 @@ class FormDOMPreprocessor:
 
             // Check enclosing container title
             let parentQuestion = '';
-            const container = el.closest('div[class*="question"], div[class*="field"], div[class*="_question_"]') || el.parentElement;
+            const container = el.closest('[data-field-id]') ||
+                el.closest('div[class*="question"], div[class*="field"], div[class*="_question_"]') || el.parentElement;
             if (container) {
-                const titleEl = container.querySelector('label, h2, h3, h4, [class*="title"], [class*="heading"], [class*="_label_"]');
+                // Deel keeps the real question in a sibling <p> and uses a
+                // nested <label> only for the generic "Your answer" text.
+                const titleEl = container.querySelector(':scope > p, :scope > h1, :scope > h2, :scope > h3, :scope > h4') ||
+                    container.querySelector('h2, h3, h4, [class*="title"], [class*="heading"], [class*="_label_"]');
                 if (titleEl && titleEl !== el) {
                     parentQuestion = titleEl.innerText;
                 }
             }
 
-            if (!labelText && parentQuestion) {
+            const genericLabel = /^(your answer|answer)$/i.test((labelText || '').trim());
+            if (parentQuestion && (!labelText || genericLabel)) {
                 labelText = parentQuestion;
             }
             if (!labelText && el.placeholder) {
@@ -138,8 +144,8 @@ class FormDOMPreprocessor:
                 name: el.name || '',
                 tag: el.tagName.toLowerCase(),
                 type: el.type || '',
-                label: (labelText || '').trim().replace(/\\s+/g, ' '),
-                parent_question: (parentQuestion || '').trim().replace(/\\s+/g, ' '),
+                label: (labelText || '').trim().replace(/\\s+/g, ' ').replace(/\\s*\\*$/, ''),
+                parent_question: (parentQuestion || '').trim().replace(/\\s+/g, ' ').replace(/\\s*\\*$/, ''),
                 required: el.required || el.getAttribute('aria-required') === 'true' || Boolean(container && container.innerText.includes('*')),
                 placeholder: el.placeholder || '',
                 options: options.slice(0, 10) // Limit to top 10 options to save tokens

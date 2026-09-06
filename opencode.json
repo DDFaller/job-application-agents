@@ -1,0 +1,45 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "read": {
+      "~/Documents/job-search/**": "allow"
+    },
+    "edit": {
+      "~/Documents/job-search/**": "allow"
+    },
+    "external_directory": {
+      "~/Documents/job-search/**": "allow"
+    },
+    "glob": {
+      "~/Documents/job-search/**": "allow"
+    },
+    "list": {
+      "~/Documents/job-search/**": "allow"
+    },
+    "bash": {
+      "*": "ask",
+      "git status": "allow",
+      "git status *": "allow",
+      "git diff": "allow",
+      "git diff *": "allow",
+      "git log": "allow",
+      "git log *": "allow",
+      "git show *": "allow",
+      "git branch": "allow",
+      "git branch *": "allow",
+      "git remote *": "allow",
+      "git rev-parse *": "allow",
+      "git ls-files *": "allow",
+      ".venv/bin/python *": "allow",
+      "/home/falluba/job-application-agents/.venv/bin/python *": "allow",
+      "xelatex *": "allow",
+      "pdfinfo *": "allow",
+      "pdftotext *": "allow",
+      "kpsewhich *": "allow",
+      "sha256sum *": "allow",
+      "cmp *": "allow",
+      "date *": "allow",
+      "find *": "ask"
+    }
+  }
+}

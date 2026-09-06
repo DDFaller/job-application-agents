@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Upload one application file to a Notion MCP file-upload URL.
 
-Supports .pdf and .tex files. The upload URL and short-lived authorization
+Supports .pdf, .tex, and .zip files. The upload URL and short-lived authorization
 token are supplied by Notion's create-file-upload tool.
 """
 
@@ -15,11 +15,18 @@ import urllib.request
 from pathlib import Path
 
 
-ROOT = Path("/home/falluba/Documents/job-search/applications").resolve()
-ALLOWED_EXTENSIONS = {".pdf", ".tex"}
+ALLOWED_ROOTS = tuple(
+    Path(path).resolve()
+    for path in (
+        "/home/falluba/Documents/job-search/applications",
+        "/home/falluba/job-application-agents/job-search/applications",
+    )
+)
+ALLOWED_EXTENSIONS = {".pdf", ".tex", ".zip"}
 CONTENT_TYPES = {
     ".pdf": "application/pdf",
     ".tex": "application/x-tex",
+    ".zip": "application/zip",
 }
 
 
@@ -34,10 +41,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     source = Path(args.file).expanduser().resolve()
-    try:
-        source.relative_to(ROOT)
-    except ValueError:
-        raise SystemExit(f"refusing file outside {ROOT}: {source}")
+    if not any(source.is_relative_to(root) for root in ALLOWED_ROOTS):
+        roots = ", ".join(str(root) for root in ALLOWED_ROOTS)
+        raise SystemExit(f"refusing file outside allowed application roots ({roots}): {source}")
     if source.suffix.lower() not in ALLOWED_EXTENSIONS:
         raise SystemExit(f"only {', '.join(sorted(ALLOWED_EXTENSIONS))} files are permitted")
     if not source.is_file():

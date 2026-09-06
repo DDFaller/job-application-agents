@@ -28,6 +28,7 @@ NULLABLE_STRINGS = (
     "source",
     "source_url",
     "canonical_url",
+    "application_url",
     "source_job_id",
     "company",
     "role",
@@ -100,6 +101,11 @@ def validate(job: dict[str, Any], template: dict[str, Any], job_path: Path) -> t
     warnings: list[str] = []
     fields = expected_fields(template)
     missing = sorted(fields - set(job))
+    # application_url was added after schema-v2 records already existed. It
+    # remains optional for legacy artifacts; all newly generated artifacts use
+    # the field from the template.
+    if "application_url" in missing:
+        missing.remove("application_url")
     unexpected = sorted(set(job) - fields)
     if missing:
         errors.append("missing fields: " + ", ".join(missing))
@@ -124,7 +130,7 @@ def validate(job: dict[str, Any], template: dict[str, Any], job_path: Path) -> t
         errors.append("work_model must be On-site, Hybrid, Remote, or Unspecified")
     if job.get("source") is not None and job.get("source") not in SOURCES:
         errors.append("source must be LinkedIn, Personio, Other ATS, Pasted text, Saved HTML, or null")
-    for field in ("source_url", "canonical_url"):
+    for field in ("source_url", "canonical_url", "application_url"):
         value = job.get(field)
         if value is not None and not valid_url(value):
             errors.append(f"{field} must be an HTTP(S) URL or null")
@@ -148,6 +154,7 @@ def validate(job: dict[str, Any], template: dict[str, Any], job_path: Path) -> t
                 errors.append(f"field_evidence[{key!r}] must be a non-empty string array")
 
     source_path: Path | None = None
+    source_bytes: bytes | None = None
     if job.get("source_document"):
         source_path = Path(job["source_document"]).expanduser()
         if not source_path.is_absolute():

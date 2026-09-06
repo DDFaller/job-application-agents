@@ -283,7 +283,9 @@ class SyncService:
 
         current_ver_snapshot = versions.get(current_version_name)
         status = "TO_APPLY"
-        canonical_url = job.get("url") or job.get("canonical_url")
+        source_url = job.get("source_url")
+        application_url = job.get("application_url") or job.get("canonical_url") or job.get("url")
+        canonical_url = application_url
         notion_page_url = manifest.get("notion_page_url")
         match_summary = None
         selected_profile = None
@@ -307,6 +309,8 @@ class SyncService:
             status=status,
             current_version=current_version_name,
             canonical_url=canonical_url,
+            source_url=source_url,
+            application_url=application_url,
             notion_page_url=notion_page_url,
             match_summary=match_summary,
             selected_profile=selected_profile,

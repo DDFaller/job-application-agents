@@ -105,12 +105,48 @@ class NotionBoardDestination(BaseJobDestination):
         return self._plugin_available
 
     def stage_job(self, job: IngestedJob) -> bool:
-        """Create Notion card with match score and source details."""
-        if not self.is_enabled():
+        """Create a plain candidate card in the Notion Job Applications board under EXTRACTED status."""
+        if not self.is_enabled() or self._plugin is None:
             return False
-        # Optional Notion sync for staged job candidates
-        logger.info("Notion destination received job: %s (Score: %d)", job.job_data.role, job.match_score)
-        return True
+        try:
+            job_data = job.job_data
+            app_id = job.job_id
+            card_data = {
+                "application_id": app_id,
+                "title": f"{job_data.company or 'Company'} - {job_data.role or 'Candidate'}",
+                "status": "EXTRACTED",
+                "job": {
+                    "company": job_data.company,
+                    "role": job_data.role,
+                    "location": job_data.location,
+                    "source": job_data.source or "Integration",
+                    "application_url": job_data.application_url or job_data.canonical_url or job_data.source_url,
+                    "source_url": job_data.source_url,
+                    "job_id": job_data.source_job_id or app_id,
+                    "requirements": job_data.requirements,
+                    "responsibilities": job_data.responsibilities,
+                    "summary": (job_data.responsibilities[0] if job_data.responsibilities else ""),
+                },
+                "match_score": job.match_score,
+                "match_breakdown": job.match_breakdown,
+                "notes": job.notes,
+            }
+            res = self._plugin.on_application_saved(
+                user_id="default_user",
+                application_id=app_id,
+                application_data=card_data,
+                version_data={
+                    "version": "raw",
+                    "match_score": job.match_score,
+                    "match_breakdown": job.match_breakdown,
+                    "created_at": job_data.posted_at or (job.created_at[:10] if job.created_at else None),
+                },
+            )
+            logger.info("Notion destination created ticket for %s (Status: EXTRACTED, Result: %s)", app_id, res.status)
+            return res.status == "OK"
+        except Exception as exc:
+            logger.error("Failed to create Notion card for job %s: %s", job.job_id, exc)
+            return False
 
 
 class FirestoreQueueDestination(BaseJobDestination):

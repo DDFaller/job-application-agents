@@ -3,6 +3,8 @@
   "inputs": {
     "job_json": null,
     "job_sha256": null,
+    "role_profile": null,
+    "role_profile_source_dir": null,
     "candidate_evidence_json": null,
     "candidate_evidence_sha256": null,
     "role_profiles_json": null,
@@ -11,7 +13,9 @@
   "job": {
     "company": null,
     "role": null,
-    "canonical_url": null
+    "canonical_url": null,
+    "source_url": null,
+    "application_url": null
   },
   "tailoring_strategy": {
     "job_family": null,

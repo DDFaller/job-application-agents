@@ -130,6 +130,7 @@ class NormalizedJobPosting:
     source: str | None = "LinkedIn"
     source_url: str | None = None
     canonical_url: str | None = None
+    application_url: str | None = None
     source_job_id: str | None = None
     company: str | None = None
     role: str | None = None
@@ -137,6 +138,8 @@ class NormalizedJobPosting:
     work_model: str = "Unspecified"  # "On-site", "Hybrid", "Remote", "Unspecified"
     employment_type: str | None = None  # "Full-time", "Contract", etc.
     seniority: str | None = None  # "Mid", "Senior", "Lead", etc.
+    experience_level: str | None = None  # e.g. "Débutant accepté", "1 an d'expérience", "5+ years"
+    experience_years: float | None = None  # e.g. 0.0, 1.0, 2.5, 5.0
     language: str | None = None
     posted_at: str | None = None  # "YYYY-MM-DD"
     closes_at: str | None = None  # "YYYY-MM-DD"
@@ -153,7 +156,36 @@ class NormalizedJobPosting:
     extracted_at: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        """Convert to standard Schema v2 job dictionary conforming to job-template.json."""
+        return {
+            "schema_version": self.schema_version,
+            "extraction_status": self.extraction_status,
+            "source": self.source,
+            "source_url": self.source_url,
+            "canonical_url": self.canonical_url,
+            "application_url": self.application_url,
+            "source_job_id": self.source_job_id,
+            "company": self.company,
+            "role": self.role,
+            "location": self.location,
+            "work_model": self.work_model,
+            "employment_type": self.employment_type,
+            "seniority": self.seniority,
+            "language": self.language,
+            "posted_at": self.posted_at,
+            "closes_at": self.closes_at,
+            "responsibilities": list(self.responsibilities),
+            "requirements": list(self.requirements),
+            "preferred_skills": list(self.preferred_skills),
+            "technologies": list(self.technologies),
+            "application_instructions": list(self.application_instructions),
+            "source_document": self.source_document,
+            "source_sha256": self.source_sha256,
+            "field_evidence": dict(self.field_evidence),
+            "missing_fields": list(self.missing_fields),
+            "warnings": list(self.warnings),
+            "extracted_at": self.extracted_at,
+        }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> NormalizedJobPosting:
@@ -163,6 +195,7 @@ class NormalizedJobPosting:
             source=data.get("source"),
             source_url=data.get("source_url"),
             canonical_url=data.get("canonical_url"),
+            application_url=data.get("application_url"),
             source_job_id=data.get("source_job_id"),
             company=data.get("company"),
             role=data.get("role"),
@@ -170,6 +203,8 @@ class NormalizedJobPosting:
             work_model=data.get("work_model", "Unspecified"),
             employment_type=data.get("employment_type"),
             seniority=data.get("seniority"),
+            experience_level=data.get("experience_level"),
+            experience_years=float(data["experience_years"]) if data.get("experience_years") is not None else None,
             language=data.get("language"),
             posted_at=data.get("posted_at"),
             closes_at=data.get("closes_at"),
