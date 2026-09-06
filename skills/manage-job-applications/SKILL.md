@@ -78,6 +78,12 @@ can supervise the child agent through the Agent Deck PTY. Stage effort maps to
 OpenCode's `--variant`; auto-approval remains opt-in. The binary is resolved
 from `OPENCODE_BIN`, PATH, or `~/.opencode/bin/opencode`.
 
+Muse runs headless through `muse exec` with `--workspace <data-root>` (a
+single policy-gated root; data-only scoping mirroring agy), `--model`, and
+`--reasoning-effort` for stage effort. Interactive batches use the bare
+`muse` session form for supervision. Auto-approval is opt-in via
+`--approval-mode never` and stays confined to the data root.
+
 ## Completion
 
 After local preparation, the controller may use its authenticated Notion

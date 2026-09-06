@@ -139,6 +139,23 @@ def build_worker_command(
         command.append(prompt)
         return command
 
+    if profile.harness == "muse":
+        # `muse` accepts a single policy-gated workspace root (last flag
+        # wins), so scope it to the data root where all task inputs, outputs,
+        # and result contracts live — mirroring agy's data-only scoping.
+        # The repository stays the process working directory via the executor.
+        command = ["muse"]
+        if not interactive:
+            command.append("exec")
+        command.extend(("--workspace", data_root, "--model", profile.model))
+        if profile.effort:
+            command.extend(("--reasoning-effort", profile.effort))
+        if profile.auto_approve:
+            command.extend(("--approval-mode", "never"))
+        command.extend(profile.extra_args)
+        command.append(prompt)
+        return command
+
     command = ["codex"]
     if task.stage == "job-extraction":
         command.append("--search")
@@ -169,7 +186,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--task", type=Path, required=True)
     parser.add_argument("--repository-root", type=Path, required=True)
-    parser.add_argument("--harness", choices=("agy", "codex", "opencode"), required=True)
+    parser.add_argument("--harness", choices=("agy", "codex", "opencode", "muse"), required=True)
     parser.add_argument("--model", required=True)
     parser.add_argument("--effort", choices=("low", "medium", "high"))
     parser.add_argument("--auto-approve", action="store_true")

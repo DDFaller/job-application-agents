@@ -63,6 +63,9 @@ class ContractTests(unittest.TestCase):
     def test_worker_extra_args_cannot_override_managed_flags(self) -> None:
         with self.assertRaisesRegex(ValueError, "cannot override"):
             WorkerProfile("codex", "test", extra_args=("resume",)).validate()
+        with self.assertRaisesRegex(ValueError, "cannot override"):
+            WorkerProfile("muse", "test", extra_args=("--workspace",)).validate()
+        WorkerProfile("muse", "muse-spark", "low").validate()
 
 
 if __name__ == "__main__":

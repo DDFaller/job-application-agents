@@ -164,14 +164,14 @@ class StageResult:
 
 @dataclass(frozen=True)
 class WorkerProfile:
-    harness: Literal["agy", "codex", "opencode"]
+    harness: Literal["agy", "codex", "opencode", "muse"]
     model: str
     effort: Literal["low", "medium", "high"] | None = None
     auto_approve: bool = False
     extra_args: tuple[str, ...] = field(default_factory=tuple)
 
     def validate(self) -> None:
-        if self.harness not in {"agy", "codex", "opencode"}:
+        if self.harness not in {"agy", "codex", "opencode", "muse"}:
             raise ValueError(f"unsupported worker harness: {self.harness}")
         if not self.model:
             raise ValueError("worker model is required")
@@ -185,6 +185,9 @@ class WorkerProfile:
             "--dangerously-skip-permissions", "--dangerously-bypass-approvals-and-sandbox",
             "--auto", "--agent", "--dir", "--format", "--pure", "--variant",
             "--interactive", "run", "resume", "fork",
+            "--workspace", "--reasoning-effort", "--approval-mode",
+            "--disable-approval", "--yolo", "--trust-workspace",
+            "--json", "exec",
         }
         if any(argument in forbidden for argument in self.extra_args):
             raise ValueError("extra_args cannot override task isolation or managed provider flags")

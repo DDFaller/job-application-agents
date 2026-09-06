@@ -129,6 +129,43 @@ class WorkerCommandTests(unittest.TestCase):
                 )
             self.assertIn("--auto", command)
 
+    def test_muse_uses_exec_with_data_root_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            command = build_worker_command(
+                WorkerProfile("muse", "muse-spark", "medium"), self.make_task(root),
+                repository_root=root / "repo",
+            )
+            self.assertEqual(
+                command[:6],
+                ["muse", "exec", "--workspace", str(root), "--model", "muse-spark"],
+            )
+            self.assertIn("--reasoning-effort", command)
+            self.assertIn("medium", command)
+            self.assertNotIn("--approval-mode", command)
+            self.assertTrue(command[-1].startswith("Execute exactly one job-application workflow stage."))
+
+    def test_muse_auto_approval_is_opt_in(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            command = build_worker_command(
+                WorkerProfile("muse", "muse-spark", auto_approve=True),
+                self.make_task(root), repository_root=root / "repo",
+            )
+            self.assertIn("--approval-mode", command)
+            self.assertIn("never", command)
+
+    def test_muse_interactive_omits_exec(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            command = build_worker_command(
+                WorkerProfile("muse", "muse-spark"), self.make_task(root),
+                repository_root=root / "repo", interactive=True,
+            )
+            self.assertEqual(command[0], "muse")
+            self.assertNotIn("exec", command)
+            self.assertIn("--workspace", command)
+
 
 if __name__ == "__main__":
     unittest.main()

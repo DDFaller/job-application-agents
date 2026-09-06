@@ -8,7 +8,10 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import shlex
+import shutil
 import subprocess
+import sys
 import time
 
 from job_application_agents.config import resolve_data_root
@@ -41,9 +44,22 @@ def parser() -> argparse.ArgumentParser:
     )
     result.add_argument("--role-profile", help="Default role profile to use for jobs (e.g. backend-engineer)")
     result.add_argument("--executor", choices=("agent-deck", "tmux", "local"), default="agent-deck")
-    result.add_argument("--harness", choices=("agy", "codex", "opencode"), default="agy")
+    result.add_argument("--harness", choices=("agy", "codex", "opencode", "muse"), default="agy")
     result.add_argument("--interactive", action="store_true", default=True, help="Enable interactive co-pilot mode in tmux/agent-deck")
     result.add_argument("--no-interactive", dest="interactive", action="store_false", help="Disable interactive mode")
+    result.add_argument(
+        "--unattended",
+        action="store_true",
+        help="Shorthand for --no-interactive --auto-approve: workers run headless "
+        "with pre-granted workspace permissions and never wait on prompts",
+    )
+    result.add_argument(
+        "--launch-host",
+        action="store_true",
+        help="Create the batch from --jobs, then spawn an Agent Deck host session "
+        "that runs the controller tick loop; per-stage subworkers launch as "
+        "their own sessions under the shared --group",
+    )
     result.add_argument("--model", default="gpt-5.6-luna")
     result.add_argument("--effort", choices=("low", "medium", "high"))
     result.add_argument(
@@ -123,35 +139,126 @@ def load_profiles(path: Path) -> dict[str, WorkerProfile]:
     return profiles
 
 
-def main() -> int:
-    args = parser().parse_args()
-    if not 0.25 <= args.interval <= 45:
-        raise SystemExit("--interval must be between 0.25 and 45 seconds")
-    repository = Path(__file__).resolve().parent.parent
-    data_root = resolve_data_root(args.data_root, repository_root=repository)
+def resolve_profiles(args: argparse.Namespace) -> dict[str, WorkerProfile]:
+    if args.profiles:
+        return load_profiles(args.profiles)
+    profile = WorkerProfile(
+        args.harness, args.model, args.effort, auto_approve=args.auto_approve
+    )
+    return {stage.profile: profile for stage in DEFAULT_APPLICATION_STAGES}
+
+
+def build_executor(
+    args: argparse.Namespace, repository: Path
+) -> AgentDeckExecutor | TmuxExecutor | LocalProcessExecutor:
     if args.executor == "agent-deck":
-        executor = AgentDeckExecutor(
+        return AgentDeckExecutor(
             repository,
             group=args.group,
             parent_session=args.parent_session,
             interactive=args.interactive,
         )
-    elif args.executor == "tmux":
-        executor = TmuxExecutor(
+    if args.executor == "tmux":
+        return TmuxExecutor(
             repository,
             interactive=args.interactive,
         )
-    else:
-        executor = LocalProcessExecutor(repository)
+    return LocalProcessExecutor(repository)
+
+
+def build_host_argv(
+    args: argparse.Namespace,
+    data_root: Path,
+    state_path: Path,
+) -> list[str]:
+    """Re-invoke this script inside the host session to run the tick loop."""
+    command = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "--state",
+        str(state_path.resolve()),
+        "--data-root",
+        str(data_root),
+        "--executor",
+        args.executor,
+        "--group",
+        args.group,
+        "--max-active-jobs",
+        str(args.max_active_jobs),
+        "--max-stage-attempts",
+        str(args.max_stage_attempts),
+        "--interval",
+        str(args.interval),
+    ]
     if args.profiles:
-        profiles = load_profiles(args.profiles)
+        command.extend(("--profiles", str(args.profiles.resolve())))
     else:
-        profile = WorkerProfile(
-            args.harness, args.model, args.effort, auto_approve=args.auto_approve
-        )
-        profiles = {stage.profile: profile for stage in DEFAULT_APPLICATION_STAGES}
+        command.extend(("--harness", args.harness, "--model", args.model))
+        if args.effort:
+            command.extend(("--effort", args.effort))
+    if args.auto_approve:
+        command.append("--auto-approve")
+    if not args.interactive:
+        command.append("--no-interactive")
+    if args.once:
+        command.append("--once")
+    return command
+
+
+def launch_host_session(
+    *,
+    repository: Path,
+    group: str,
+    title: str,
+    host_argv: list[str],
+) -> str:
+    """Spawn an Agent Deck host session running the controller loop."""
+    command = [
+        "agent-deck",
+        "launch",
+        str(repository),
+        "--title",
+        title,
+        "--group",
+        group,
+        "--cmd",
+        shlex.join(host_argv),
+        "--no-wait",
+        "--json",
+    ]
+    completed = subprocess.run(
+        command, check=True, capture_output=True, text=True
+    )
+    payload = json.loads(completed.stdout)
+    identifier = str(payload.get("id") or payload.get("session_id") or "")
+    if not identifier:
+        raise RuntimeError("Agent Deck host launch returned no session id")
+    return identifier
+
+
+def apply_unattended(args: argparse.Namespace) -> None:
+    if args.unattended:
+        args.interactive = False
+        args.auto_approve = True
+
+
+def main() -> int:
+    args = parser().parse_args()
+    apply_unattended(args)
+    if args.launch_host and args.executor != "agent-deck":
+        raise SystemExit("--launch-host requires --executor agent-deck")
+    if args.launch_host and args.state is not None:
+        raise SystemExit("--launch-host creates a new batch; pass --jobs, not --state")
+    if not 0.25 <= args.interval <= 45:
+        raise SystemExit("--interval must be between 0.25 and 45 seconds")
+    repository = Path(__file__).resolve().parent.parent
+    data_root = resolve_data_root(args.data_root, repository_root=repository)
+    profiles = resolve_profiles(args)
     for profile in profiles.values():
         profile.validate()
+    if any(profile.harness == "muse" for profile in profiles.values()):
+        if shutil.which("muse") is None:
+            raise SystemExit("Muse preflight failed; install the muse CLI or fix PATH")
     if any(profile.harness == "opencode" for profile in profiles.values()):
         executable = resolve_opencode_binary()
         try:
@@ -168,12 +275,35 @@ def main() -> int:
     controller = BatchController(
         repository,
         data_root,
-        executor=executor,
+        executor=build_executor(args, repository),
         profiles=profiles,
         stages=DEFAULT_APPLICATION_STAGES,
         max_active_jobs=args.max_active_jobs,
         max_stage_attempts=args.max_stage_attempts,
     )
+    if args.launch_host:
+        state_path = controller.create(
+            load_jobs(args.jobs, default_role_profile=args.role_profile)
+        )
+        batch_id = json.loads(state_path.read_text(encoding="utf-8"))["batch_id"]
+        host_argv = build_host_argv(args, data_root, state_path)
+        host_id = launch_host_session(
+            repository=repository,
+            group=args.group,
+            title=f"{batch_id}-host",
+            host_argv=host_argv,
+        )
+        print(
+            json.dumps(
+                {
+                    "event": "host-launched",
+                    "batch": batch_id,
+                    "state": str(state_path),
+                    "host": host_id,
+                }
+            )
+        )
+        return 0
     state_path = args.state
     if state_path is None:
         if args.cancel:
