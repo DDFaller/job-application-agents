@@ -1,5 +1,7 @@
 # Playwright Auto-Apply Engine & Human-in-the-Loop Architecture
 
+> Owner: @DDFaller/app-core (see docs/ownership.md).
+
 The **Auto-Apply Engine** (`job_application_agents/auto_apply`) automates the filling, PDF attachment, mobile/web review, and multi-signal submission verification for employer job applications.
 
 The local review path is available through `scripts/phone_review.py`. It keeps

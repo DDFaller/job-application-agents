@@ -30,3 +30,7 @@ Write concise, imperative commit subjects. Existing history commonly uses prefix
 ## Security & Configuration
 
 Never commit `.env` files, Firebase credentials, Notion tokens, private candidate data, or generated application records. Keep personal data under the configured external data root and verify that tests do not contact production services.
+
+## Code Map
+
+- `.github` - project configuration

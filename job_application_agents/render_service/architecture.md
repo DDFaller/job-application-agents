@@ -1,5 +1,7 @@
 # LaTeX Render Service Architecture
 
+> Owner: @DDFaller/render-pipeline (see docs/ownership.md).
+
 The **LaTeX Render Service** (`job_application_agents/render_service`) is a deterministic, containerized XeLaTeX compilation engine that compiles tailored LaTeX resumes and motivation letters into standard PDF documents without requiring local TeXLive installations on developer machines.
 
 ---

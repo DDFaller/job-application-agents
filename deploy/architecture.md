@@ -1,5 +1,7 @@
 # Cloud Infrastructure & Deployment Architecture
 
+> Owner: @DDFaller/platform (see docs/ownership.md).
+
 The **Deployment Subsystem** (`deploy/`) provides containerization, security policies, and deployment blueprints for running background workers on local emulators, Docker Compose, or Google Cloud (Cloud Run / Firestore).
 
 ---

@@ -1,5 +1,7 @@
 # Cloud Sync & Multi-Tenant Firestore Architecture
 
+> Owner: @DDFaller/data-sync (see docs/ownership.md).
+
 The **Sync Engine** (`job_application_agents/sync`) provides multi-tenant persistence, atomic versioning, and bidirectional synchronization between local workspace application bundles and a configured Google Cloud Firestore project.
 
 ---

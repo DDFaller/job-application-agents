@@ -1,5 +1,7 @@
 # Agent Skills and Orchestration Architecture
 
+> Owner: @DDFaller/agent-workflows (see docs/ownership.md).
+
 The application pipeline uses a flat, durable control plane. Skills define one
 semantic operation; they do not form a tree of agents.
 
