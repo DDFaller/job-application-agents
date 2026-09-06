@@ -14,7 +14,7 @@ posting, or submit an application.
 
 ## Mandatory workflow
 
-1. Load and validate `integrations/auto_ingest_settings.py` before connecting
+1. Load and validate `/home/falluba/job-application-agents/integrations/auto_ingest_settings.py` before connecting
    to Gmail. Unknown providers, duplicate aliases, malformed values, and
    missing aliases for enabled providers must fail closed.
 2. Load the durable processed-email ledger at
@@ -57,13 +57,13 @@ dry run from consuming a message's one normal processing opportunity.
 ## Commands
 
 ```bash
-python3 scripts/ingest_jobs.py validate-settings
-python3 scripts/ingest_jobs.py ingest --providers LINKEDIN,INDEED
-python3 scripts/ingest_jobs.py ingest --force-recheck
-python3 scripts/ingest_jobs.py ingest --recheck-message-id '<id@example.com>'
-python3 scripts/ingest_jobs.py ingest --recheck-uid 123
-python3 scripts/ingest_jobs.py ingest --retry-failed
-python3 scripts/ingest_jobs.py show-processed
+/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/scripts/ingest_jobs.py validate-settings
+/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/scripts/ingest_jobs.py ingest --providers LINKEDIN,INDEED
+/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/scripts/ingest_jobs.py ingest --force-recheck
+/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/scripts/ingest_jobs.py ingest --recheck-message-id '<id@example.com>'
+/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/scripts/ingest_jobs.py ingest --recheck-uid 123
+/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/scripts/ingest_jobs.py ingest --retry-failed
+/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/scripts/ingest_jobs.py show-processed
 ```
 
 Gmail job-alert ingestion and application-status email synchronization are

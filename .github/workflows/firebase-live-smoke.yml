@@ -1,0 +1,72 @@
+name: Firebase Live Smoke Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    environment: firebase-live
+    env:
+      JAA_FIREBASE_PROJECT_ID: tinder-jobs-4bf1b
+      JAA_ARTIFACT_ROOT: ${{ runner.temp }}/jaa-live-render-artifacts
+      JAA_WORKER_ID: github-live-${{ github.run_id }}-${{ github.run_attempt }}
+      JAA_INTEGRATION_ID: github-live-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Authenticate to Google Cloud with OIDC
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.JAA_WIF_PROVIDER }}
+          service_account: ${{ vars.JAA_WIF_SERVICE_ACCOUNT }}
+          create_credentials_file: true
+
+      - name: Install render client
+        run: python -m pip install -e .
+
+      - name: Start live Firebase worker
+        env:
+          JAA_ADC_PATH: ${{ steps.auth.outputs.credentials_file_path }}
+        run: |
+          mkdir -p "$JAA_ARTIFACT_ROOT"
+          export JAA_HOST_UID="$(id -u)"
+          export JAA_HOST_GID="$(id -g)"
+          python scripts/render_service.py up --live
+
+      - name: Compile smoke-test documents
+        run: python scripts/check_render_service.py
+
+      - name: Capture worker logs on failure
+        if: failure()
+        env:
+          JAA_ADC_PATH: ${{ steps.auth.outputs.credentials_file_path }}
+        run: python scripts/render_service.py logs --live > "$RUNNER_TEMP/live-render-worker.log"
+
+      - name: Stop worker before record cleanup
+        if: always()
+        env:
+          JAA_ADC_PATH: ${{ steps.auth.outputs.credentials_file_path }}
+        run: python scripts/render_service.py down --live
+
+      - name: Clean up smoke-test records
+        if: always()
+        run: python scripts/check_render_service.py --cleanup-only
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-render-diagnostics
+          path: |
+            ${{ runner.temp }}/live-render-worker.log
+            ${{ runner.temp }}/jaa-live-render-artifacts

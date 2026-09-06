@@ -173,6 +173,61 @@ class IntegrationsConfig:
                 pass
         return int(self._raw_config.get("min_match_score", 60))
 
+    def get_max_posting_age_days(self) -> int | None:
+        """Maximum age in days for job postings before rejecting as stale (default 7, None to disable)."""
+        env_val = os.getenv("MAX_POSTING_AGE_DAYS")
+        if env_val:
+            try:
+                val = int(env_val)
+                return val if val > 0 else None
+            except ValueError:
+                pass
+        cfg_val = self._raw_config.get("max_posting_age_days")
+        if cfg_val is not None:
+            return int(cfg_val) if int(cfg_val) > 0 else None
+        return 7
+
+    def get_max_experience_years(self) -> float | None:
+        """Maximum allowed required experience in years before rejecting (default 1.0, None to disable)."""
+        env_val = os.getenv("MAX_EXPERIENCE_YEARS")
+        if env_val:
+            try:
+                val = float(env_val)
+                return val if val >= 0 else None
+            except ValueError:
+                pass
+        cfg_val = self._raw_config.get("max_experience_years")
+        if cfg_val is not None:
+            return float(cfg_val) if float(cfg_val) >= 0 else None
+        return 1.0
+
+    def get_reject_expired_deadlines(self) -> bool:
+        """Whether to automatically reject job postings whose application deadline has expired."""
+        env_val = os.getenv("REJECT_EXPIRED_DEADLINES")
+        if env_val is not None:
+            return env_val.lower() in ("true", "1", "yes")
+        return bool(self._raw_config.get("reject_expired_deadlines", True))
+
+    def get_excluded_title_patterns(self) -> list[str]:
+        """List of regex patterns for job titles that should be discarded (e.g. chef, manager)."""
+        env_val = os.getenv("EXCLUDED_TITLE_PATTERNS")
+        if env_val:
+            return [p.strip() for p in env_val.split(",") if p.strip()]
+        cfg_val = self._raw_config.get("excluded_title_patterns")
+        if cfg_val is not None and isinstance(cfg_val, list):
+            return [str(p) for p in cfg_val]
+        return [
+            r"\b(?:chef|cheffe|chef\.fe|chef\(fe\)|chef-fe|chefs)\b",
+            r"\b(?:manager|managers|management|managing)\b",
+        ]
+
+    def get_enable_title_prefilter(self) -> bool:
+        """Whether the title exclusion prefilter is enabled."""
+        env_val = os.getenv("ENABLE_TITLE_PREFILTER")
+        if env_val is not None:
+            return env_val.lower() in ("true", "1", "yes")
+        return bool(self._raw_config.get("enable_title_prefilter", True))
+
     def get_staging_directory(self) -> Path:
         """Resolve staging directory for ingested jobs."""
         env_dir = os.getenv("INGESTION_STAGING_DIR")
@@ -184,15 +239,15 @@ class IntegrationsConfig:
             return Path(file_dir).expanduser().resolve()
 
         # Default paths in priority order
+        data_root = self.get_data_root()
         candidates = [
-            Path("job-search/staging_job"),
+            data_root / "staging_job",
             Path.home() / "Documents" / "job-search" / "staging_job",
-            Path("staging_job"),
         ]
         for c in candidates:
             if c.parent.is_dir():
                 return c.resolve()
-        return Path("job-search/staging_job").resolve()
+        return (data_root / "staging_job").resolve()
 
     def get_data_root(self) -> Path:
         """Resolve the durable local data root used by integration ledgers."""
@@ -205,9 +260,7 @@ class IntegrationsConfig:
         configured = load_storage_config().data_root
         if configured is not None:
             return configured
-        # The repository's existing job-search directory is the conventional
-        # private data root and is ignored by version control.
-        return (Path.cwd() / "job-search").resolve()
+        return (Path.home() / "Documents" / "job-search").resolve()
 
     def get_playwright_settings(self) -> dict[str, Any]:
         """Get Playwright runtime settings."""

@@ -1,0 +1,92 @@
+# Code ownership routing for job-application-agents.
+#
+# Status: advisory until required code-owner review is enabled in branch
+# protection. Details and review triggers: docs/ownership.md.
+# Team handles are placeholders; replace them with real teams or users
+# once the roster is known.
+#
+# GitHub applies the LAST matching rule, so general rules come first and
+# shared-contract exceptions come last.
+
+# Default owner for anything not matched below.
+* @DDFaller/tooling
+
+# 1. Application Core: matching, drafting, verification, job search.
+job_application_agents/auto_apply/ @DDFaller/app-core
+job_application_agents/job_search/ @DDFaller/app-core
+job_application_agents/orchestration/ @DDFaller/app-core
+job_application_agents/sources.py @DDFaller/app-core
+job_application_agents/config.py @DDFaller/app-core
+job_application_agents/test_sources.py @DDFaller/app-core
+job_application_agents/test_config.py @DDFaller/app-core
+main.py @DDFaller/app-core
+config.jsonc @DDFaller/app-core
+config.example.jsonc @DDFaller/app-core
+scripts/auto_apply.py @DDFaller/app-core
+scripts/phone_review.py @DDFaller/app-core
+
+# 2. Render Pipeline: deterministic XeLaTeX compilation stack.
+job_application_agents/render_service/ @DDFaller/render-pipeline
+scripts/render_service.py @DDFaller/render-pipeline
+scripts/check_render_service.py @DDFaller/render-pipeline
+
+# 3. Data, Sync & Ingestion: Firestore/Notion sync, provider ingestion,
+# Firebase handler code, and the ops scripts that drive them.
+job_application_agents/sync/ @DDFaller/data-sync
+job_application_agents/plugins/ @DDFaller/data-sync
+integrations/ @DDFaller/data-sync
+functions/ @DDFaller/data-sync
+scripts/ingest_jobs.py @DDFaller/data-sync
+scripts/rank_jobs.py @DDFaller/data-sync
+scripts/sync.py @DDFaller/data-sync
+scripts/run_application_batch.py @DDFaller/data-sync
+scripts/enqueue_mock_application.py @DDFaller/data-sync
+scripts/prepare_application_dirs.py @DDFaller/data-sync
+scripts/reconcile_notion_and_firestore.py @DDFaller/data-sync
+scripts/migrate_and_sync_old_board_to_new.py @DDFaller/data-sync
+scripts/repopulate_all_notion_cards.py @DDFaller/data-sync
+scripts/setup_notion_board.py @DDFaller/data-sync
+scripts/notion_upload_file.py @DDFaller/data-sync
+scripts/notion_upload_pdf.py @DDFaller/data-sync
+scripts/inspect_notion.py @DDFaller/data-sync
+scripts/inspect_cards.py @DDFaller/data-sync
+scripts/debug_notion_board.py @DDFaller/data-sync
+scripts/seed_and_test_cloud_flow.py @DDFaller/data-sync
+
+# 4. Platform, Deploy & Release: containers, emulators, Firestore rules,
+# Cloud Build, PWA, and deploy tooling.
+deploy/ @DDFaller/platform
+firebase.json @DDFaller/platform
+scripts/deploy_cloud_run.py @DDFaller/platform
+scripts/deploy_cloud.sh @DDFaller/platform
+scripts/start_workers.sh @DDFaller/platform
+scripts/stop_workers.sh @DDFaller/platform
+
+# 5. Agent Workflows & Docs: skills conventions and project documentation.
+skills/ @DDFaller/agent-workflows
+docs/ @DDFaller/agent-workflows
+README.md @DDFaller/agent-workflows
+scripts/generate_application_report.py @DDFaller/agent-workflows
+
+# 6. Repo Tooling & Hygiene: packaging, environment setup, CI, process docs.
+# (Unlisted scripts/ files fall through to the default owner above.)
+pyproject.toml @DDFaller/tooling
+requirements.txt @DDFaller/tooling
+requirements-cloud.txt @DDFaller/tooling
+scripts/check.py @DDFaller/tooling
+scripts/setup.py @DDFaller/tooling
+.github/ @DDFaller/tooling
+AGENTS.md @DDFaller/tooling
+agents.md @DDFaller/tooling
+LICENSE @DDFaller/tooling
+opencode.json @DDFaller/tooling
+jobs.json @DDFaller/tooling
+render.example.jsonc @DDFaller/tooling
+
+# Shared contracts: require steward sign-off from BOTH listed owners,
+# regardless of which domain initiates the change. Keep this block last.
+job_application_agents/plugins/base.py @DDFaller/data-sync @DDFaller/app-core
+integrations/base.py @DDFaller/data-sync @DDFaller/app-core
+integrations/models.py @DDFaller/data-sync @DDFaller/app-core
+job_application_agents/render_service/migrations/ @DDFaller/render-pipeline @DDFaller/platform
+deploy/firestore/ @DDFaller/platform @DDFaller/data-sync

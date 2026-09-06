@@ -44,6 +44,9 @@ jobs:
       - name: Run real XeLaTeX integration
         run: python scripts/check_render_service.py
 
+      - name: Run direct-mode compile check (no Firestore)
+        run: python scripts/check_render_service.py --direct
+
       - name: Capture service logs on failure
         if: failure()
         run: docker compose -f deploy/compose.yaml logs --no-color > "$RUNNER_TEMP/render-service.log"

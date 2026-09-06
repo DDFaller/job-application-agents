@@ -7,9 +7,8 @@ import hashlib
 import json
 from pathlib import Path
 import re
-from typing import Any
-
 from ..models import JobAlertItem, NormalizedJobPosting, ScrapedJobContent
+from ..pipeline.experience_prefilter import parse_experience_years
 
 
 TECH_KEYWORDS = [
@@ -78,18 +77,26 @@ class JobPostingExtractor:
             role = role.split(" - ")[0].strip()
 
         source_type = "LinkedIn" if "linkedin.com" in scraped.source_url.lower() else "Other ATS"
+        # Keep the exact link received from the alert as provenance. The
+        # scraper's canonical URL is the final public destination after HTTP
+        # or browser redirects (for example, an Ashby application page).
+        source_url = (alert_hint.raw_url if alert_hint and alert_hint.raw_url else scraped.source_url)
+        application_url = scraped.canonical_url or source_url
         source_job_id = alert_hint.job_id if alert_hint else None
         if not source_job_id:
-            m = re.search(r"/jobs/view/(\d+)", scraped.canonical_url)
+            m = re.search(r"/jobs/view/(\d+)", source_url or scraped.canonical_url)
             if m:
                 source_job_id = m.group(1)
 
-        # Detect work model, seniority, employment type, technologies
+        # Detect work model, seniority, employment type, technologies, and dates
         work_model = self._detect_work_model(source_text)
         seniority = self._detect_seniority(role, source_text)
         employment_type = self._detect_employment_type(source_text)
         technologies = self._detect_technologies(source_text)
         language = self._detect_language(source_text)
+        posted_at = self._detect_posted_date(scraped, source_text)
+        closes_at = self._detect_deadline(scraped, source_text)
+        experience_level, experience_years = self._detect_experience(scraped, source_text)
 
         # Extract structured lists
         responsibilities, requirements, preferred_skills = self._extract_sections(source_text)
@@ -115,8 +122,11 @@ class JobPostingExtractor:
             work_model=work_model,
             employment_type=employment_type,
             seniority=seniority,
+            experience_level=experience_level,
             language=language,
             source_job_id=source_job_id,
+            posted_at=posted_at,
+            closes_at=closes_at,
             responsibilities=responsibilities,
             requirements=requirements,
             preferred_skills=preferred_skills,
@@ -127,8 +137,9 @@ class JobPostingExtractor:
             schema_version=2,
             extraction_status="complete",
             source=source_type,
-            source_url=scraped.source_url,
-            canonical_url=scraped.canonical_url,
+            source_url=source_url,
+            canonical_url=application_url,
+            application_url=application_url,
             source_job_id=source_job_id,
             company=company,
             role=role,
@@ -136,9 +147,11 @@ class JobPostingExtractor:
             work_model=work_model,
             employment_type=employment_type,
             seniority=seniority,
+            experience_level=experience_level,
+            experience_years=experience_years,
             language=language,
-            posted_at=None,
-            closes_at=None,
+            posted_at=posted_at,
+            closes_at=closes_at,
             responsibilities=responsibilities,
             requirements=requirements,
             preferred_skills=preferred_skills,
@@ -167,8 +180,12 @@ class JobPostingExtractor:
             lines.append(f"**Company:** {company}")
         if location:
             lines.append(f"**Location:** {location}")
-        if scraped.canonical_url:
-            lines.append(f"**URL:** {scraped.canonical_url}")
+        source_url = alert_hint.raw_url if alert_hint and alert_hint.raw_url else scraped.source_url
+        application_url = scraped.canonical_url or source_url
+        if source_url:
+            lines.append(f"**Source URL:** {source_url}")
+        if application_url:
+            lines.append(f"**Application URL:** {application_url}")
         lines.append("")
 
         if scraped.visible_text:
@@ -244,6 +261,10 @@ class JobPostingExtractor:
             # Check if bullet point
             if line.startswith(("-", "*", "•", "–")) or re.match(r"^\d+[\.\)]\s+", line):
                 clean_item = re.sub(r"^[-*•–\d\.\)]+\s*", "", line).strip()
+                # Ignore boilerplate and form notices
+                lower_item = clean_item.lower()
+                if any(b in lower_item for b in ("champs obligatoires", "données personnelles", "politique de confidentialité", "tous droits réservés")):
+                    continue
                 if len(clean_item) > 10:
                     if current_section == "resp" and len(responsibilities) < 8:
                         responsibilities.append(clean_item)
@@ -253,6 +274,124 @@ class JobPostingExtractor:
                         preferred_skills.append(clean_item)
 
         return responsibilities, requirements, preferred_skills
+
+    def _parse_iso_date(self, date_str: str) -> str | None:
+        """Parse various date formats (DD/MM/YYYY, YYYY-MM-DD, ISO timestamps) into YYYY-MM-DD."""
+        if not date_str:
+            return None
+        clean = str(date_str).strip()
+        if re.match(r"^\d{4}-\d{2}-\d{2}", clean):
+            return clean[:10]
+        m = re.match(r"^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", clean)
+        if m:
+            d, mth, y = m.groups()
+            return f"{y}-{int(mth):02d}-{int(d):02d}"
+        return None
+
+    def _detect_deadline(self, scraped: ScrapedJobContent, text: str) -> str | None:
+        """Detect application deadline (closes_at) from metadata, JSON-LD, or body text."""
+        if scraped.meta_tags.get("closes_at"):
+            parsed = self._parse_iso_date(scraped.meta_tags["closes_at"])
+            if parsed:
+                return parsed
+        if scraped.meta_tags.get("deadline"):
+            parsed = self._parse_iso_date(scraped.meta_tags["deadline"])
+            if parsed:
+                return parsed
+
+        for jld in (scraped.json_ld or []):
+            if isinstance(jld, dict) and jld.get("validThrough"):
+                parsed = self._parse_iso_date(str(jld["validThrough"]))
+                if parsed:
+                    return parsed
+
+        # Search in visible text or raw HTML
+        patterns = [
+            r"Date\s+limite(?:\s+de\s+candidature)?\s*:\s*(?:<[^>]+>\s*)*(\d{1,2}/\d{1,2}/\d{4})",
+            r"Date\s+de\s+clôture\s*:\s*(?:<[^>]+>\s*)*(\d{1,2}/\d{1,2}/\d{4})",
+            r"Date\s+de\s+fin(?:\s+de\s+publication)?\s*:\s*(?:<[^>]+>\s*)*(\d{1,2}/\d{1,2}/\d{4})",
+            r"(?:deadline|apply\s+before|closing\s+date)\s*:\s*(\d{1,2}/\d{1,2}/\d{4}|\d{4}-\d{2}-\d{2})",
+        ]
+        target_texts = [text, scraped.raw_html or ""]
+        for target in target_texts:
+            for pat in patterns:
+                m = re.search(pat, target, re.I)
+                if m:
+                    parsed = self._parse_iso_date(m.group(1))
+                    if parsed:
+                        return parsed
+        return None
+
+    def _detect_posted_date(self, scraped: ScrapedJobContent, text: str) -> str | None:
+        """Detect date posted from metadata, JSON-LD, or body text."""
+        if scraped.meta_tags.get("posted_at"):
+            parsed = self._parse_iso_date(scraped.meta_tags["posted_at"])
+            if parsed:
+                return parsed
+        if scraped.meta_tags.get("date_posted"):
+            parsed = self._parse_iso_date(scraped.meta_tags["date_posted"])
+            if parsed:
+                return parsed
+
+        for jld in (scraped.json_ld or []):
+            if isinstance(jld, dict) and jld.get("datePosted"):
+                parsed = self._parse_iso_date(str(jld["datePosted"]))
+                if parsed:
+                    return parsed
+
+        patterns = [
+            r"Date\s+de\s+publication\s*:\s*(?:<[^>]+>\s*)*(\d{1,2}/\d{1,2}/\d{4})",
+            r"Publiée?\s+le\s*:\s*(?:<[^>]+>\s*)*(\d{1,2}/\d{1,2}/\d{4})",
+            r"(?:posted\s+on|posted\s+date)\s*:\s*(\d{1,2}/\d{1,2}/\d{4}|\d{4}-\d{2}-\d{2})",
+        ]
+        target_texts = [text, scraped.raw_html or ""]
+        for target in target_texts:
+            for pat in patterns:
+                m = re.search(pat, target, re.I)
+                if m:
+                    parsed = self._parse_iso_date(m.group(1))
+                    if parsed:
+                        return parsed
+        return None
+
+    def _detect_experience(self, scraped: ScrapedJobContent, source_text: str) -> tuple[str | None, float | None]:
+        """Detect experience requirement string and parsed numerical years."""
+        # 1. Meta tags / direct scraper fields
+        meta_exp = (
+            scraped.meta_tags.get("experience")
+            or scraped.meta_tags.get("experience_level")
+            or scraped.meta_tags.get("experienceRequirements")
+        )
+        if meta_exp and str(meta_exp).strip():
+            years = parse_experience_years(str(meta_exp))
+            if years is not None:
+                return str(meta_exp).strip(), years
+
+        # 2. Check JSON-LD metadata if present
+        for ld in (scraped.json_ld or []):
+            if isinstance(ld, dict):
+                exp_req = ld.get("experienceRequirements")
+                if exp_req:
+                    if isinstance(exp_req, dict):
+                        months = exp_req.get("monthsOfExperience")
+                        if months is not None:
+                            return f"{months} mois", round(float(months) / 12.0, 2)
+                    elif isinstance(exp_req, str):
+                        clean_req = str(exp_req).strip()
+                        years = parse_experience_years(clean_req)
+                        if years is not None:
+                            return clean_req, years
+
+        # 3. Text search
+        years = parse_experience_years(source_text)
+        if years is not None:
+            # Locate snippet in source text
+            for line in source_text.splitlines():
+                if parse_experience_years(line) == years and len(line.strip()) < 100:
+                    return line.strip(), years
+            return f"{years:g} year{'s' if years != 1 else ''} experience", years
+
+        return None, None
 
     def _generate_field_evidence(
         self,
@@ -265,10 +404,13 @@ class JobPostingExtractor:
         seniority: str | None,
         language: str | None,
         source_job_id: str | None,
-        responsibilities: list[str],
-        requirements: list[str],
-        preferred_skills: list[str],
-        technologies: list[str],
+        experience_level: str | None = None,
+        posted_at: str | None = None,
+        closes_at: str | None = None,
+        responsibilities: list[str] | None = None,
+        requirements: list[str] | None = None,
+        preferred_skills: list[str] | None = None,
+        technologies: list[str] | None = None,
     ) -> dict[str, list[str]]:
         """Generate verifiable exact quote evidence mapped to source.md content."""
         evidence: dict[str, list[str]] = {}
@@ -294,22 +436,28 @@ class JobPostingExtractor:
             evidence["employment_type"] = find_best_quote(employment_type, employment_type)
         if seniority:
             evidence["seniority"] = find_best_quote(seniority, seniority)
+        if experience_level:
+            evidence["experience_level"] = find_best_quote(experience_level, f"Expérience: {experience_level}")
         if language:
             evidence["language"] = find_best_quote("English" if language == "en" else "Français", f"Language: {language}")
         if source_job_id:
             evidence["source_job_id"] = find_best_quote(source_job_id, f"Job ID: {source_job_id}")
+        if posted_at:
+            evidence["posted_at"] = find_best_quote(posted_at, f"Date de publication: {posted_at}")
+        if closes_at:
+            evidence["closes_at"] = find_best_quote(closes_at, f"Date limite de candidature: {closes_at}")
 
         # Array fields
-        for idx, resp in enumerate(responsibilities):
+        for idx, resp in enumerate(responsibilities or []):
             evidence[f"responsibilities.{idx}"] = find_best_quote(resp[:30], resp)
 
-        for idx, req in enumerate(requirements):
+        for idx, req in enumerate(requirements or []):
             evidence[f"requirements.{idx}"] = find_best_quote(req[:30], req)
 
-        for idx, pref in enumerate(preferred_skills):
+        for idx, pref in enumerate(preferred_skills or []):
             evidence[f"preferred_skills.{idx}"] = find_best_quote(pref[:30], pref)
 
-        for idx, tech in enumerate(technologies):
+        for idx, tech in enumerate(technologies or []):
             evidence[f"technologies.{idx}"] = find_best_quote(tech, tech)
 
         return evidence

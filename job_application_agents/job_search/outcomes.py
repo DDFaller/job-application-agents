@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta
 
 FINAL_STATUSES = {"OFFER", "REJECTED", "WITHDRAWN", "HIRED", "OFFER_DECLINED"}
 KNOWN_STATUSES = {
+    "EXTRACTED",
     "TO_APPLY",
     "APPLIED",
     "REAPPLY",

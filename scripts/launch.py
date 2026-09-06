@@ -26,6 +26,7 @@ def main() -> None:
     if not (runtime_bin / "python").is_file():
         raise SystemExit("missing .venv runtime; run python3 scripts/setup.py first")
     os.environ["PATH"] = str(runtime_bin) + os.pathsep + os.environ.get("PATH", "")
+    os.environ["JAA_DATA_ROOT"] = str(data_root)
     os.environ.setdefault(
         "JAA_ARTIFACT_ROOT",
         str(data_root / ".render-service" / "artifacts"),
@@ -59,21 +60,17 @@ def main() -> None:
         "PLAYWRIGHT_STORAGE_STATE",
     ):
         os.environ.pop(secret_name, None)
-    # A complete application reserves five nested workers (extraction,
-    # evidence, writer, copy humanizer, and reviewer). Keep these limits
-    # visible to the coordinator so a queue cannot oversubscribe the
-    # six-thread session.
-    os.environ.setdefault("JAA_WORKFLOW_MAX_NESTED_SLOTS", "6")
-    os.environ.setdefault("JAA_WORKFLOW_MAX_CONCURRENT_APPLICATIONS", "1")
+    # The durable controller launches one flat stage session at a time for a
+    # job. Capacity is therefore expressed as active jobs, never nested slots.
+    os.environ.setdefault("JAA_WORKFLOW_MAX_ACTIVE_JOBS", "3")
     try:
-        nested_slots = int(os.environ["JAA_WORKFLOW_MAX_NESTED_SLOTS"])
+        active_jobs = int(os.environ["JAA_WORKFLOW_MAX_ACTIVE_JOBS"])
     except ValueError as exc:
-        raise SystemExit("JAA_WORKFLOW_MAX_NESTED_SLOTS must be an integer") from exc
-    if nested_slots < 1:
-        raise SystemExit("JAA_WORKFLOW_MAX_NESTED_SLOTS must be positive")
+        raise SystemExit("JAA_WORKFLOW_MAX_ACTIVE_JOBS must be an integer") from exc
+    if active_jobs < 1:
+        raise SystemExit("JAA_WORKFLOW_MAX_ACTIVE_JOBS must be positive")
     command = [
         "codex", "-C", str(repo), "--add-dir", str(data_root),
-        "-c", "agents.enabled=true", "-c", f"agents.max_concurrent_threads_per_session={nested_slots}",
         *args.codex_args,
     ]
     os.execvp(command[0], command)

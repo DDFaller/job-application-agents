@@ -528,7 +528,10 @@ class ConfigTests(unittest.TestCase):
     def test_artifact_root_from_env_var_and_default(self) -> None:
         with mock.patch.dict(os.environ, {"JAA_ARTIFACT_ROOT": "/custom/artifacts"}):
             self.assertEqual(artifact_root(), Path("/custom/artifacts"))
-        with mock.patch.dict(os.environ, {}, clear=True):
+        with mock.patch.dict(os.environ, {}, clear=True), mock.patch(
+            "job_application_agents.render_service.config.load_storage_config"
+        ) as mock_load:
+            mock_load.return_value = mock.MagicMock(data_root=Path("/custom/data_root"))
             self.assertTrue(str(artifact_root()).endswith(".render-service/artifacts"))
 
 

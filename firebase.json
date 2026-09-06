@@ -1,0 +1,48 @@
+{
+  "functions": {
+    "source": ".",
+    "runtime": "python312",
+    "ignore": [
+      "firebase-debug.log",
+      "firebase-debug.*.log",
+      ".firebase",
+      ".git",
+      ".venv",
+      "venv",
+      "google-cloud-sdk",
+      "job-search",
+      "jobs",
+      "reports",
+      "node_modules",
+      "__pycache__",
+      ".pytest_cache",
+      ".mypy_cache",
+      ".env",
+      "*.pyc"
+    ]
+  },
+  "firestore": {
+    "rules": "deploy/firestore/firestore.rules",
+    "indexes": "deploy/firestore/firestore.indexes.json"
+  },
+  "hosting": {
+    "public": "deploy/pwa",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  },
+
+
+  "emulators": {
+    "firestore": {
+      "host": "0.0.0.0",
+      "port": 8080
+    },
+    "ui": {
+      "enabled": false
+    },
+    "singleProjectMode": true
+  }
+}

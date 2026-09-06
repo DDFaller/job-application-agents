@@ -9,18 +9,19 @@ Use `$maintain-master-curriculum` as the factual source workflow. This skill
 owns the conversational setup and search preferences, not a second candidate
 database.
 
-1. Resolve the configured data root and inspect existing source/profile
-   manifests before asking questions.
-2. Offer three paths: ingest supplied documents, import one CV, or conduct a
+1. Resolve the configured data root (`~/Documents/job-search`) and inspect existing
+   role-profile source directories under `<data-root>/sources/<role-profile>/`.
+2. Offer three paths: ingest supplied documents, import an existing CV, or conduct a
    guided interview. Re-running setup must be additive and idempotent.
 3. Collect only missing preferences: target functions and title variants,
    industries, geographic tiers, work model, professional languages and
    proficiency, compensation baseline, deal-breakers, preferred portals, and
    CV language.
-4. Send factual material through `$maintain-master-curriculum` with its exact
-   preview and approval gates. Store preferences in a separate approved
-   search-preferences artifact bound to the current source fingerprint.
-5. Suggest adjacent role families as options, never as silently enabled
+4. Scaffold or update the candidate's role-profile source files:
+   - `identity.md`, `experience.md`, `education.md`, `skills.md`, `projects.md`, `languages.md`
+   - Generate an initial 1-page `pre-formatted.tex` reference CV and companion `international_utilities.tex`.
+   - Store search preferences in `search-preferences.json`.
+5. Suggest adjacent role profiles as options, never as silently enabled
    targets. Return readiness, unresolved contradictions, and configured
    search terms.
 

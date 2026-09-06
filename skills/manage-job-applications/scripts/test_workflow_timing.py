@@ -84,6 +84,25 @@ class TimingTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "finalized"):
                 timing.start_event(path, "late", "s", "stage", 1, None, "active")
 
+    def test_intermediate_status_cannot_finalize_a_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run.json"
+            timing.init_record(path, "run-intermediate", "https://example.test/job")
+            with self.assertRaisesRegex(ValueError, "only be finalized"):
+                timing.finalize(path, "completed", None, None)
+            record = json.loads(path.read_text())
+            self.assertEqual(record["status"], "running")
+            self.assertIsNone(record["ended_at"])
+
+    def test_cannot_finish_event_after_finalize(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run.json"
+            timing.init_record(path, "run-late-finish", "https://example.test/job")
+            timing.start_event(path, "open", "s", "stage", 1, None, "active")
+            timing.finalize(path, "failed", None, None)
+            with self.assertRaisesRegex(ValueError, "after the run is finalized"):
+                timing.finish_event(path, "open", "completed", None)
+
     def test_finalize_closes_open_events(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "run.json"

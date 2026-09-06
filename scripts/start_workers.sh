@@ -15,8 +15,9 @@ if [ ! -f "$PYTHON_BIN" ]; then
     PYTHON_BIN="python3"
 fi
 
-mkdir -p "$REPO_ROOT/data/logs"
-LOG_FILE="$REPO_ROOT/data/logs/workers.log"
+WORKER_DIR="${TMPDIR:-/tmp}/job-application-agents-${USER:-local}/logs"
+mkdir -p "$WORKER_DIR"
+LOG_FILE="$WORKER_DIR/workers.log"
 
 DAEMON_MODE=false
 ENABLE_SUBMISSION=false
@@ -49,7 +50,7 @@ if [ "$DAEMON_MODE" = true ]; then
     nohup "$PYTHON_BIN" -m job_application_agents.plugins.notion.worker >> "$LOG_FILE" 2>&1 &
     NOTION_PID=$!
 
-    echo "${PW_PID:-} $NOTION_PID" > "$REPO_ROOT/data/logs/workers.pid"
+    echo "${PW_PID:-} $NOTION_PID" > "$WORKER_DIR/workers.pid"
     echo "✅ Workers started successfully in background!"
     if [ "$ENABLE_SUBMISSION" = true ]; then
         echo "   • Playwright Worker PID: $PW_PID"
@@ -57,7 +58,7 @@ if [ "$DAEMON_MODE" = true ]; then
         echo "   • Playwright Worker:     disabled (default)"
     fi
     echo "   • Notion Worker PID:     $NOTION_PID"
-    echo -e "\nTo view live logs: tail -f data/logs/workers.log"
+    echo -e "\nTo view live logs: tail -f $LOG_FILE"
     echo "To stop workers:   ./scripts/stop_workers.sh"
     exit 0
 fi

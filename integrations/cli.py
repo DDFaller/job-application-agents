@@ -111,11 +111,15 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     senders = [s.strip() for s in args.sender.split(",")] if args.sender else None
     providers = [p.strip() for p in args.providers.split(",") if p.strip()] if args.providers else None
     min_score = args.min_score if args.min_score is not None else cfg.get_min_match_score()
+    max_age = args.max_posting_age_days if args.max_posting_age_days is not None else cfg.get_max_posting_age_days()
+    max_exp = args.max_experience_years if args.max_experience_years is not None else cfg.get_max_experience_years()
 
     print("\n🚀 Starting Job Ingestion Pipeline...")
     print(f"• Target Senders: {senders or 'mailbox-wide (provider filter)'}")
     print(f"• Max items to process: {args.limit}")
     print(f"• Minimum Match Score: {min_score}")
+    print(f"• Max Posting Age: {f'{max_age} days' if max_age else 'unlimited'}")
+    print(f"• Max Required Experience: {f'{max_exp} year(s)' if max_exp is not None else 'unlimited'}")
     print(f"• Dry run: {args.dry_run}")
     print(f"• Unread only: {not args.all}")
     print(f"• Providers: {providers or pipeline.providers}")
@@ -134,6 +138,8 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         recheck_message_id=args.recheck_message_id,
         recheck_uid=args.recheck_uid,
         retry_failed=args.retry_failed,
+        max_posting_age_days=args.max_posting_age_days,
+        max_experience_years=args.max_experience_years,
     )
 
     print("\n" + "=" * 60)
@@ -335,6 +341,8 @@ def main(argv: list[str] | None = None) -> int:
     ingest_p.add_argument("--dry-run", action="store_true", help="Scan and score without writing staging files")
     ingest_p.add_argument("--all", action="store_true", help="Include already-read emails (not only UNSEEN)")
     ingest_p.add_argument("--since-days", type=int, help="Only look at emails within the last N days")
+    ingest_p.add_argument("--max-posting-age-days", "--max-age", type=int, help="Maximum posting age in days (default: 7)")
+    ingest_p.add_argument("--max-experience-years", "--max-exp", type=float, help="Maximum required experience in years (default: 1.0)")
     ingest_p.add_argument("--providers", help="Comma-separated enabled providers (e.g. LINKEDIN,INDEED)")
     ingest_p.add_argument("--force-recheck", action="store_true", help="Reprocess all fetched messages, including checked ones")
     ingest_p.add_argument("--recheck-message-id", help="Reprocess one message by Message-ID")

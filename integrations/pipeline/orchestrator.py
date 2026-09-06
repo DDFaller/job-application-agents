@@ -31,9 +31,15 @@ from ..models import (
 )
 from ..scrapers.extractor import JobPostingExtractor
 from ..scrapers.hybrid_scraper import HybridJobScraper
+from .date_prefilter import JobDatePrefilter
 from .destinations import FileSystemStagingDestination
+from .experience_prefilter import JobExperiencePrefilter
+from .title_prefilter import JobTitlePrefilter
 
 logger = logging.getLogger(__name__)
+
+
+_UNSET = object()
 
 
 class JobIngestionPipeline(JobSourceIntegration):
@@ -45,6 +51,13 @@ class JobIngestionPipeline(JobSourceIntegration):
         email_client: BaseEmailClient | None = None,
         scraper: BaseJobScraper | None = None,
         extractor: JobPostingExtractor | None = None,
+        date_prefilter: JobDatePrefilter | None = None,
+        experience_prefilter: JobExperiencePrefilter | None = None,
+        title_prefilter: JobTitlePrefilter | None = None,
+        max_posting_age_days: Any = _UNSET,
+        max_experience_years: Any = _UNSET,
+        excluded_title_patterns: Any = _UNSET,
+        enable_title_prefilter: bool | None = None,
         destinations: list[BaseJobDestination] | None = None,
         ledger: ProcessedEmailLedger | None = None,
         ledger_path: Path | None = None,
@@ -57,7 +70,37 @@ class JobIngestionPipeline(JobSourceIntegration):
         self.email_client = email_client or create_email_client(self.email_config)
         self.scraper = scraper or HybridJobScraper()
         self.extractor = extractor or JobPostingExtractor()
-
+        effective_max_age = (
+            max_posting_age_days
+            if max_posting_age_days is not _UNSET
+            else self.config.get_max_posting_age_days()
+        )
+        self.date_prefilter = date_prefilter or JobDatePrefilter(
+            max_posting_age_days=effective_max_age,
+            reject_expired_deadlines=self.config.get_reject_expired_deadlines(),
+        )
+        effective_max_exp = (
+            max_experience_years
+            if max_experience_years is not _UNSET
+            else self.config.get_max_experience_years()
+        )
+        self.experience_prefilter = experience_prefilter or JobExperiencePrefilter(
+            max_experience_years=effective_max_exp,
+        )
+        effective_excluded_titles = (
+            excluded_title_patterns
+            if excluded_title_patterns is not _UNSET
+            else self.config.get_excluded_title_patterns()
+        )
+        effective_enable_title_prefilter = (
+            enable_title_prefilter
+            if enable_title_prefilter is not None
+            else self.config.get_enable_title_prefilter()
+        )
+        self.title_prefilter = title_prefilter or JobTitlePrefilter(
+            excluded_patterns=effective_excluded_titles,
+            enabled=effective_enable_title_prefilter,
+        )
         staging_dir = self.config.get_staging_directory()
         self.destinations = destinations or [FileSystemStagingDestination(staging_dir)]
         resolved_ledger_path = ledger_path or (
@@ -84,6 +127,8 @@ class JobIngestionPipeline(JobSourceIntegration):
         recheck_message_id: str | None = None,
         recheck_uid: str | None = None,
         retry_failed: bool = False,
+        max_posting_age_days: int | None = None,
+        max_experience_years: float | int | None = None,
     ) -> IngestionResult:
         """Execute the end-to-end ingestion workflow."""
         start_time = time.time()
@@ -175,7 +220,13 @@ class JobIngestionPipeline(JobSourceIntegration):
                     if job_key:
                         message_job_keys.append(job_key)
                     try:
-                        ingested = self._process_single_job_alert(alert, min_score, dry_run)
+                        ingested = self._process_single_job_alert(
+                            alert,
+                            min_score,
+                            dry_run,
+                            max_posting_age_days=max_posting_age_days,
+                            max_experience_years=max_experience_years,
+                        )
                         result.jobs.append(ingested)
                         result.total_jobs_scraped += 1
                         if ingested.status == "STAGED":
@@ -253,6 +304,9 @@ class JobIngestionPipeline(JobSourceIntegration):
         alert: JobAlertItem,
         min_score: int,
         dry_run: bool,
+        max_posting_age_days: int | None = None,
+        max_experience_years: float | int | None = None,
+        excluded_title_patterns: list[str] | None = None,
     ) -> IngestedJob:
         """Fetch, scrape, extract, score, and stage a single job opening."""
         target_url = alert.canonical_url or alert.raw_url
@@ -263,13 +317,67 @@ class JobIngestionPipeline(JobSourceIntegration):
         # B. Structure content into NormalizedJobPosting and source.md
         job_posting, source_text = self.extractor.extract(scraped, alert_hint=alert)
 
+        job_id = job_posting.source_job_id or alert.job_id or f"job-{int(time.time()*1000)}"
+
+        # B.0 Zero-Token Title Prefilter Gate: filter out jobs matching excluded keywords (e.g. chef, manager)
+        title_decision = self.title_prefilter.evaluate_job(job_posting)
+        if not title_decision.passed:
+            logger.info("Title prefilter skipped job '%s' (%s): %s", job_posting.role, target_url, title_decision.reason)
+            return IngestedJob(
+                job_id=job_id,
+                job_data=job_posting,
+                match_score=0,
+                match_rating="Low Match",
+                match_breakdown={},
+                source_email_sender=alert.email_sender,
+                source_email_subject=alert.metadata.get("email_subject"),
+                status="SKIPPED",
+                notes=f"Title prefilter: {title_decision.reason}",
+            )
+
+        # B.1 Zero-Token Date Prefilter Gate: filter stale or expired jobs before LLM scoring
+        date_decision = self.date_prefilter.evaluate_job(
+            job_posting,
+            max_posting_age_days=max_posting_age_days,
+        )
+        if not date_decision.passed:
+            logger.info("Date prefilter skipped job '%s' (%s): %s", job_posting.role, target_url, date_decision.reason)
+            return IngestedJob(
+                job_id=job_id,
+                job_data=job_posting,
+                match_score=0,
+                match_rating="Low Match",
+                match_breakdown={},
+                source_email_sender=alert.email_sender,
+                source_email_subject=alert.metadata.get("email_subject"),
+                status="SKIPPED",
+                notes=f"Date prefilter: {date_decision.reason}",
+            )
+
+        # B.2 Zero-Token Experience Prefilter Gate: filter jobs exceeding required experience limit
+        exp_decision = self.experience_prefilter.evaluate_job(
+            job_posting,
+            max_experience_years=max_experience_years,
+        )
+        if not exp_decision.passed:
+            logger.info("Experience prefilter skipped job '%s' (%s): %s", job_posting.role, target_url, exp_decision.reason)
+            return IngestedJob(
+                job_id=job_id,
+                job_data=job_posting,
+                match_score=0,
+                match_rating="Low Match",
+                match_breakdown={},
+                source_email_sender=alert.email_sender,
+                source_email_subject=alert.metadata.get("email_subject"),
+                status="SKIPPED",
+                notes=f"Experience prefilter: {exp_decision.reason}",
+            )
+
         # C. Score match against candidate master curriculum
         match_breakdown_obj = JobMatchScorer.score_job(job_posting.to_dict())
         match_score = match_breakdown_obj.total_score
         match_rating = match_breakdown_obj.rating
         match_dict = match_breakdown_obj.to_dict()
-
-        job_id = job_posting.source_job_id or alert.job_id or f"job-{int(time.time()*1000)}"
 
         ingested = IngestedJob(
             job_id=job_id,

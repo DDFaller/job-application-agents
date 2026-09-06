@@ -34,3 +34,18 @@ google-cloud-sdk/
 gmail-client-secret.json
 gmail-token.json
 gmail-secrets.json
+
+# Temporary & agent run artifacts
+bundle.json
+*.pid
+*.tmp
+*.tmp.*
+.tmp*
+reports/workflow-runs/
+.firebase/
+.agent-deck-*/
+.lavish/
+.mcp.json.lock
+job_application_agents.egg-info/
+firestore-*.html
+

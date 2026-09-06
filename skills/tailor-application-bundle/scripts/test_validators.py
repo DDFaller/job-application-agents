@@ -353,6 +353,135 @@ class ValidatorTests(unittest.TestCase):
             )
             self.assertTrue(any("requires contracting_party" in error for error in errors))
 
+    def test_validate_bundle_without_candidate_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            job_path = root / "job.json"
+            write_json(job_path, {
+                "company": "Example", "role": "Backend Engineer", "canonical_url": "https://example.test/job",
+            })
+            bundle = {
+                "schema_version": 5,
+                "inputs": {
+                    "job_json": str(job_path),
+                    "role_profile": "backend-engineer",
+                },
+                "job": {"company": "Example", "role": "Backend Engineer", "canonical_url": "https://example.test/job"},
+                "tailoring_strategy": {
+                    "job_family": "computing", "document_focus": "technical",
+                    "selected_profile_id": "backend-engineer",
+                    "job_priorities": [{"text": "Python and APIs"}],
+                    "fit_arguments": [{"text": "Strong Python experience"}],
+                    "selection_rationale": {"text": "Matches backend requirements"},
+                },
+                "candidate": {
+                    "name": "Daniel Faller", "headline": "Backend Engineer",
+                    "location": "Paris, France", "contact": ["daniel@example.com"],
+                    "summary": {"text": "Experienced backend engineer."},
+                },
+                "resume_sections": [
+                    {
+                        "title": "Experience",
+                        "items": [
+                            {
+                                "type": "experience",
+                                "company": "Back Market",
+                                "position": "Backend Engineer Intern",
+                                "location": "Paris",
+                                "dates": "Feb 2026 – Aug 2026",
+                                "summary": "Built data pipelines",
+                                "highlights": [{"text": "Designed DSL-based pipeline"}],
+                            }
+                        ],
+                    }
+                ],
+                "motivation_letter": {
+                    "date": "September 2026", "recipient": "Hiring Team", "subject": "Application",
+                    "salutation": "Dear Hiring Team,",
+                    "paragraphs": [{"text": "I am writing to apply for the Backend Engineer position."}],
+                    "closing": "Sincerely,", "signature": "Daniel Faller",
+                },
+                "match_analysis": {
+                    "matched": [{"text": "Python experience"}],
+                    "gaps": [], "credibility_warnings": [],
+                },
+                "generated_at": "2026-09-04T12:00:00+00:00",
+            }
+            bundle_path = root / "bundle.json"
+            write_json(bundle_path, bundle)
+            template = json.loads((SKILL_DIR / "references" / "bundle-template.json").read_text(encoding="utf-8"))
+            errors = bundle_validator.validate(bundle, template, bundle_path)
+            self.assertEqual(errors, [])
+
+    def test_validate_review_without_candidate_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            job = root / "job.json"
+            write_json(job, {
+                "schema_version": 2,
+                "job": {"company": "Acme", "role": "Engineer", "canonical_url": "https://acme.com/jobs/1"},
+                "field_evidence": {"company": "Acme", "role": "Engineer"},
+            })
+            bundle_path = root / "bundle.json"
+            bundle = {
+                "schema_version": 5,
+                "inputs": {
+                    "job_json": str(job),
+                    "job_sha256": bundle_validator.digest(job),
+                },
+                "job": {"company": "Acme", "role": "Engineer", "canonical_url": "https://acme.com/jobs/1"},
+                "tailoring_strategy": {
+                    "job_family": "backend", "document_focus": "resume-primary",
+                    "profile_ranking": [], "fit_arguments": [], "job_priorities": [],
+                    "selection_rationale": {"text": "Focusing on backend systems"},
+                },
+                "candidate": {
+                    "name": "Daniel Faller", "headline": "Backend Engineer",
+                    "location": "Paris, France", "contact": ["daniel@example.com"],
+                    "summary": {"text": "Experienced backend engineer."},
+                },
+                "resume_sections": [],
+                "motivation_letter": {
+                    "date": "September 2026", "recipient": "Hiring Team", "subject": "Application",
+                    "salutation": "Dear Hiring Team,",
+                    "paragraphs": [{"text": "I am writing to apply."}],
+                    "closing": "Sincerely,", "signature": "Daniel Faller",
+                },
+                "match_analysis": {"matched": [], "gaps": [], "credibility_warnings": []},
+                "generated_at": "2026-09-04T12:00:00+00:00",
+            }
+            write_json(bundle_path, bundle)
+            review = {
+                "schema_version": 1,
+                "inputs": {
+                    "job_json": str(job),
+                    "job_sha256": bundle_validator.digest(job),
+                    "bundle_json": str(bundle_path),
+                    "bundle_sha256": bundle_validator.digest(bundle_path),
+                },
+                "checks": {
+                    "job_family_supported": True,
+                    "priorities_job_grounded": True,
+                    "selected_evidence_relevant": True,
+                    "document_focus_appropriate": True,
+                    "claims_evidence_backed": True,
+                    "profile_selected_from_approved_catalog": True,
+                    "profile_score_and_seniority_supported": True,
+                    "employment_relationships_clear": True,
+                    "education_credentials_clear": True,
+                    "language_and_text_quality": True,
+                    "ats_reading_order": True,
+                },
+                "findings": [],
+                "verdict": "accept",
+                "reviewed_at": "2026-09-04T12:30:00+00:00",
+            }
+            review_path = root / "review.json"
+            write_json(review_path, review)
+            template = review_validator.load(SKILL_DIR / "references" / "tailoring-review-template.json")
+            errors = review_validator.validate(review, template)
+            self.assertEqual(errors, [])
+
 
 if __name__ == "__main__":
     unittest.main()

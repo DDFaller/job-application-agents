@@ -28,6 +28,7 @@ REQUIRED_TOOLS = ("python3", "codex")
 # containerized worker can still render for a cloud-only installation.
 LOCAL_LATEX_TOOLS = ("latexmk", "xelatex", "kpsewhich", "pdfinfo", "pdftotext")
 HUMANIZER_LOCK = Path("skills") / "humanizer.lock.json"
+USER_CONFIG = Path(".config") / "job-application-agents" / "config.json"
 
 
 def command_exists(name: str) -> bool:
@@ -207,6 +208,24 @@ def update_marketplace(home: Path) -> tuple[Path, str]:
     return path, marketplace_name
 
 
+def write_data_root_config(home: Path, data_root: Path) -> Path:
+    """Persist the canonical root without overwriting unrelated user config."""
+    path = home / USER_CONFIG
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        value = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            raise ValueError(f"configuration must be a JSON object: {path}")
+    else:
+        value = {}
+    value["data_root"] = str(data_root.resolve())
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
+    os.chmod(temporary, 0o600)
+    temporary.replace(path)
+    return path
+
+
 def first_party_scripts(plugin: Path) -> list[Path]:
     paths = list((plugin / "scripts").glob("*.py"))
     paths.extend(plugin.glob("skills/*/scripts/*.py"))
@@ -245,6 +264,11 @@ def readiness(
     blocked: list[str] = []
     for tool in REQUIRED_TOOLS:
         (ready if command_exists(tool) else blocked).append(f"tool: {tool}")
+    ready.append(
+        "Agent Deck managed executor"
+        if command_exists("agent-deck")
+        else "direct-process executor (optional Agent Deck is unavailable)"
+    )
     missing_latex = missing_local_latex_tools()
     for tool in LOCAL_LATEX_TOOLS:
         label = f"local LaTeX tool: {tool}"
@@ -302,6 +326,9 @@ def main() -> int:
         return 1
     repo = Path(__file__).resolve().parent.parent
     data_root = args.data_root.expanduser().resolve()
+    if data_root == repo or data_root.is_relative_to(repo) or repo.is_relative_to(data_root):
+        print("BLOCKED --data-root must be outside the repository", file=sys.stderr)
+        return 1
     print(f"Job Application Agents setup ({platform.system()})")
     if args.check:
         ready, blocked = readiness(
@@ -363,6 +390,11 @@ def main() -> int:
         print(f"BLOCKED Could not install the Python render-service runtime: {exc}", file=sys.stderr)
         return 1
     home = Path.home()
+    try:
+        user_config = write_data_root_config(home, data_root)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"BLOCKED Could not persist the canonical data root: {exc}", file=sys.stderr)
+        return 1
     plugin = home / ".codex" / "plugins" / PLUGIN_NAME
     plugin.parent.mkdir(parents=True, exist_ok=True)
     copy_plugin(repo, plugin)
@@ -386,10 +418,13 @@ def main() -> int:
         ], text=True)
 
     print(f"READY   data root: {data_root}")
+    print(f"READY   canonical data-root config: {user_config}")
     print(f"READY   personal marketplace: {marketplace}")
     print(f"READY   scoped command rules: {rules}")
     print(f"READY   Python runtime: {runtime_python}")
     print(f"READY   Humanizer skill v{humanizer_version}: {humanizer_path}")
+    if not command_exists("agent-deck"):
+        print("NEXT    Install Agent Deck for managed durable sessions; direct execution remains available.")
     if args.skip_local_latex:
         print("NEXT    Set JAA_RENDER_MODE=cloud for rendering without local LaTeX tools.")
     elif args.cloud:

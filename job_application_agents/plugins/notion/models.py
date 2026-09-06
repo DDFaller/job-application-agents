@@ -40,6 +40,8 @@ class NotionCardPayload:
     work_model: str = "Unspecified"
     source: str = "Other ATS"
     job_url: str | None = None
+    source_url: str | None = None
+    application_url: str | None = None
     source_job_id: str = ""
     current_version: str = "v001"
     generated_at: str | None = None

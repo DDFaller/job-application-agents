@@ -1,0 +1,4 @@
+interface:
+  display_name: "Map Candidate Evidence"
+  short_description: "Map or reuse validated candidate evidence"
+  default_prompt: "Use $map-candidate-evidence to execute only the supplied candidate-evidence StageTask."

@@ -1,6 +1,14 @@
 # Playwright Auto-Apply Engine & Human-in-the-Loop Architecture
 
+> Owner: @DDFaller/app-core (see docs/ownership.md).
+
 The **Auto-Apply Engine** (`job_application_agents/auto_apply`) automates the filling, PDF attachment, mobile/web review, and multi-signal submission verification for employer job applications.
+
+The local review path is available through `scripts/phone_review.py`. It keeps
+the Playwright page in a persistent browser profile, stores encrypted step
+checkpoints under the application package, and serves an authenticated mobile
+review UI over the computer's private network. The UI uses server-sent events
+for state changes and never exposes local document or browser-profile paths.
 
 ---
 
@@ -37,6 +45,12 @@ sequenceDiagram
     Draft->>DOM: Capture submission-success.png
     Draft->>Cloud: Update Status to APPLIED & attach Proof Package
 ```
+
+For the local workflow, the approval boundary is step-scoped: the phone sends
+the active revision and hash, the local controller applies one step, checkpoints
+the resulting URL and fields, and pauses again before the next step. Login,
+CAPTCHA, and ambiguous navigation controls become `BLOCKED` checkpoints until
+the candidate resolves them in the visible desktop browser.
 
 ---
 

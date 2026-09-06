@@ -5,9 +5,9 @@ description: Analyze skill gaps between the approved candidate evidence and rank
 
 # Plan Upskilling
 
-1. Load the approved source manifest and one or more validated job openings or
+1. Load the candidate's role-profile sources (`sources/<role-profile>/`) and one or more validated job openings or
    ranking results. Distinguish required, preferred, and exploratory skills.
-2. Have a clean-context agent compare evidence to requirements and group gaps
+2. Have a clean-context agent compare candidate skills and experience to requirements and group gaps
    by impact, transferability, and realistic time-to-signal.
 3. Search for learning resources only when web access is available; cite and
    date every recommendation. Prefer primary course/provider documentation.

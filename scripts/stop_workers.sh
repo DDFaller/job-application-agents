@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PID_FILE="$REPO_ROOT/data/logs/workers.pid"
+WORKER_DIR="${TMPDIR:-/tmp}/job-application-agents-${USER:-local}/logs"
+PID_FILE="$WORKER_DIR/workers.pid"
 
 echo "=================================================================="
 echo "🛑 STOPPING BACKGROUND WORKERS"

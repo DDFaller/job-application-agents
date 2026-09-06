@@ -130,3 +130,23 @@ print(result.total_jobs_staged)
 
 The existing LinkedIn/Indeed parsers, public scrapers, schema-v2 evidence
 artifacts, scorer, and destinations remain compatible with this flow.
+
+## Website-Specific Scrapers
+
+Specialized scrapers are located under `integrations/scrapers/<name-of-website>/`:
+
+- **Welcome to the Jungle (`welcometothejungle`)**: Extracts job postings and structured JSON-LD data from WTTJ postings.
+- **France Travail (`france_travail`)**: Official Partner API v2 client with OAuth2 token caching, search, and detail normalization.
+- **Choisir le Service Public (`choisir_le_service_public`)**: Discovery and extraction for French state/public service postings.
+- **Emploi Territorial (`emploi_territorial`)**: Listing discovery and detail parser for territorial government jobs.
+
+All scrapers normalize outputs to `ScrapedJobContent` and `NormalizedJobPosting` matching `integrations.models`.
+
+### LinkedIn links that redirect to an ATS
+
+When a LinkedIn alert opens an employer ATS such as Ashby, ingestion preserves
+both URLs. The original email link is stored as `source_url` and the final
+public redirect destination is stored as `canonical_url` and `application_url`.
+Staged `source.md` files label both links, and Notion stores the actionable ATS
+link in `Job URL` and `Application URL` plus the LinkedIn link in `Source URL`.
+

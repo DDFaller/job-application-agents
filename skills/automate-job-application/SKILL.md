@@ -1,6 +1,6 @@
 ---
 name: automate-job-application
-description: Inspect target ATS career portals, extract token-optimized form structures, map candidate facts using low-cost models (Gemini 3.6 Flash), autofill application forms via Playwright in supervised mode, and track submission receipts.
+description: Inspect target ATS career portals, extract token-optimized form structures, map candidate facts using low-cost models (Gemini 3.8 Flash), autofill application forms via Playwright in supervised mode, and track submission receipts.
 model: flash
 ---
 
@@ -23,7 +23,7 @@ unattended submission.
 
 2. **Token Optimization Preprocessor**:
    - Never feed raw, unprocessed HTML pages (>50k tokens) to LLMs.
-   - Always run the DOM preprocessor via `scripts/inspect_form.py <url>` or `FormDOMPreprocessor.extract_from_page()`.
+   - Always run the DOM preprocessor via `/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/scripts/inspect_form.py <url>` or `FormDOMPreprocessor.extract_from_page()`.
    - The preprocessor strips scripts, styles, SVGs, base64 images, and navigation noise, compressing form data by **85% to 98%** (<500 tokens).
 
 3. **Supervised-First Policy**:
@@ -44,16 +44,16 @@ Target Job URL
       │
       ▼
 1. Pre-fetch & Token Pruning:
-   Run `scripts/inspect_form.py <url>` ──► Generates compressed form tree (~450 tokens)
+   Run `/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/scripts/inspect_form.py <url>` ──► Generates compressed form tree (~450 tokens)
       │
       ▼
 2. Fact Grounding & Mapping:
-   Read candidate identity (`sources/identity.md`) + tailored package (`resume.pdf`)
+   Read candidate identity (`<data-root>/sources/identity.md`) + tailored package (`resume.pdf`)
    Map each form field to authoritative candidate facts (Never hallucinate)
       │
       ▼
 3. Supervised Browser Execution:
-   Run `python3 scripts/auto_apply.py --app-dir <app-dir> --mode dry-run`
+   Run `/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/scripts/auto_apply.py --app-dir <app-dir> --mode dry-run`
    • Autofills Name, Email, Phone, LinkedIn, GitHub, Portfolio
    • Attaches tailored resume.pdf
    • Checks Legal Work Authorization & Hybrid commitments
@@ -74,22 +74,22 @@ Target Job URL
 
 ```bash
 # 1. Pre-fetch and inspect compressed form fields:
-python3 scripts/inspect_form.py https://jobs.ashbyhq.com/company/role-id
+/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/scripts/inspect_form.py https://jobs.ashbyhq.com/company/role-id
 
 # 2. Supervised autofill for review (no submission by default):
-python3 scripts/auto_apply.py \
-  --app-dir job-search/applications/<company>/<role>/<id> \
+/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/scripts/auto_apply.py \
+  --app-dir <data-root>/applications/<company>/<role>/<id> \
   --mode supervised
 
 # 3. Separate, explicit submission opt-in (only after the user requests it):
 JAA_ENABLE_SUBMISSION=I_UNDERSTAND_SUBMISSION \
-python3 scripts/auto_apply.py \
-  --app-dir job-search/applications/<company>/<role>/<id> \
+/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/scripts/auto_apply.py \
+  --app-dir <data-root>/applications/<company>/<role>/<id> \
   --mode supervised --allow-submit
 
 # 4. Dry-run snapshot (Generates preview.png without submitting):
-python3 scripts/auto_apply.py \
-  --app-dir job-search/applications/<company>/<role>/<id> \
+/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/scripts/auto_apply.py \
+  --app-dir <data-root>/applications/<company>/<role>/<id> \
   --mode dry-run
 ```
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Render Application Bundle"
+  short_description: "Render and promote an accepted bundle"
+  default_prompt: "Use $render-application-bundle to execute only the supplied deterministic render StageTask."

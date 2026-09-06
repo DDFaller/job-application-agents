@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
+import signal
 import sys
+import tempfile
 import threading
 from typing import Any
 from uuid import uuid4
@@ -16,6 +18,28 @@ from .config import artifact_root, firebase_project_id
 from .firestore import FirestoreRenderJobRepository
 from .models import CompileDocument, RenderRequest
 from .worker import Worker, capabilities
+
+
+# Direct-compile admission: at most this many concurrent /compile requests.
+# Extra callers fail fast with 429 instead of piling up XeLaTeX processes.
+def _direct_concurrency() -> int:
+    try:
+        return max(1, int(os.environ.get("JAA_DIRECT_MAX_CONCURRENT", "1")))
+    except ValueError:
+        return 1
+
+
+_DIRECT_SEMAPHORE = threading.Semaphore(_direct_concurrency())
+
+# Direct-compile request bodies carry only the JSON spec (sources travel via
+# the shared artifact store, already capped at 25 MB by ArtifactStore).
+MAX_DIRECT_BODY_BYTES = 1024 * 1024
+
+_DIRECT_STATUS = {
+    "INVALID_REQUEST": 400,
+    "MISSING_DEPENDENCY": 422,
+    "TIMEOUT": 504,
+}
 
 
 class RenderHTTPRequestHandler(BaseHTTPRequestHandler):
@@ -89,36 +113,69 @@ class RenderHTTPRequestHandler(BaseHTTPRequestHandler):
                 self._send_json(500, {"error": str(exc)})
             return
 
-        # 2. Direct compile endpoint (synchronous)
+        # 2. Direct compile endpoint (synchronous, no Firestore required).
+        # The caller stages sources via ArtifactStore.put_directory into the
+        # shared artifact root, then POSTs {"request": <RenderRequest dict>}.
         if path in {"/compile"}:
+            if not self.artifacts:
+                self._send_json(500, {"error": "Artifact store uninitialized"})
+                return
+            if not _DIRECT_SEMAPHORE.acquire(blocking=False):
+                self.send_response(429)
+                self.send_header("Retry-After", "30")
+                self.end_headers()
+                return
             try:
+                length = int(self.headers.get("Content-Length", 0))
+                if length > MAX_DIRECT_BODY_BYTES:
+                    self._send_json(413, {"error": "request body exceeds 1 MB"})
+                    return
                 body = self._read_json()
                 request_data = body.get("request")
                 if not request_data:
                     self._send_json(400, {"error": "missing 'request' in body"})
                     return
-                request = RenderRequest.from_dict(request_data)
-                if not self.artifacts:
-                    self._send_json(500, {"error": "Artifact store uninitialized"})
+                try:
+                    request = RenderRequest.from_dict(request_data)
+                except (ValueError, KeyError, TypeError) as exc:
+                    self._send_json(400, {
+                        "error_code": "INVALID_REQUEST",
+                        "error_detail": str(exc),
+                        "retryable": False,
+                    })
                     return
-
-                import tempfile
-                with tempfile.TemporaryDirectory(prefix="cloud-run-compile-") as temporary:
+                with tempfile.TemporaryDirectory(prefix="direct-compile-") as temporary:
                     source_dir = Path(temporary) / "source"
                     output_dir = Path(temporary) / "output"
                     source_dir.mkdir()
                     output_dir.mkdir()
-                    self.artifacts.extract(request.input_artifact, source_dir)
-                    manifest = compile_request(request, source_dir, output_dir)
+                    try:
+                        self.artifacts.extract(request.input_artifact, source_dir)
+                    except ValueError as exc:
+                        self._send_json(400, {
+                            "error_code": "INVALID_REQUEST",
+                            "error_detail": str(exc),
+                            "retryable": False,
+                        })
+                        return
+                    try:
+                        manifest = compile_request(request, source_dir, output_dir)
+                    except CompileFailure as exc:
+                        self._send_json(_DIRECT_STATUS.get(exc.code, 500), {
+                            "error_code": exc.code,
+                            "error_detail": str(exc),
+                            "retryable": exc.retryable,
+                        })
+                        return
                     out_artifact = self.artifacts.put_directory(output_dir)
                     self._send_json(200, {
                         "result": manifest,
                         "output_artifact": out_artifact.to_dict(),
                     })
-            except CompileFailure as exc:
-                self._send_json(422, {"error_code": exc.code, "error_detail": str(exc)})
             except Exception as exc:
                 self._send_json(500, {"error": str(exc)})
+            finally:
+                _DIRECT_SEMAPHORE.release()
             return
 
         self._send_json(404, {"error": "Not Found"})
@@ -142,8 +199,18 @@ def run_server(port: int = 8080, host: str = "0.0.0.0") -> None:
         worker_thread = threading.Thread(target=worker.run, name="render-queue-worker", daemon=True)
         worker_thread.start()
 
-    server = HTTPServer((host, port), RenderHTTPRequestHandler)
+    server = ThreadingHTTPServer((host, port), RenderHTTPRequestHandler)
+    server.daemon_threads = True
     print(f"Render server listening on {host}:{port} (Worker ID: {RenderHTTPRequestHandler.worker_id})...")
+
+    def _handle_signal(signum: int, frame: Any) -> None:
+        if worker is not None:
+            worker.stopping.set()
+        # shutdown() must run outside the serve_forever thread.
+        threading.Thread(target=server.shutdown, name="render-shutdown", daemon=True).start()
+
+    signal.signal(signal.SIGTERM, _handle_signal)
+    signal.signal(signal.SIGINT, _handle_signal)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

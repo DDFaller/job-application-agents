@@ -1,7 +1,7 @@
 # Declarative XeLaTeX template contract
 
 An installed template is a directory named by its lower-case slug under
-`tailor-application-bundle/assets/latex/templates/`.
+`/home/falluba/job-application-agents/skills/tailor-application-bundle/assets/latex/templates/`.
 
 ## Required files
 
