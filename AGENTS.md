@@ -29,4 +29,4 @@ Write concise, imperative commit subjects. Existing history commonly uses prefix
 
 ## Security & Configuration
 
-Never commit `.env` files, Firebase credentials, Notion tokens, private candidate data, or generated application records. Keep personal data under the configured external data root and verify that tests do not contact production services.
+Never commit `.env` files, Firebase credentials, Notion tokens, Google OAuth tokens, service-account keys, private candidate data, or generated application records. Keep personal data under the configured external data root and verify that tests do not contact production services. A read-only Google Drive folder can feed that data root through `python3 scripts/drive_artifacts.py pull`; downloads must stay outside this repository.

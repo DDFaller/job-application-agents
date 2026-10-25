@@ -34,3 +34,7 @@ google-cloud-sdk/
 gmail-client-secret.json
 gmail-token.json
 gmail-secrets.json
+drive-client-secret.json
+drive-token.json
+drive-service-account.json
+.drive-sync.json

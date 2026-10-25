@@ -40,5 +40,20 @@
 
     // disabled is the default; cloud users may select bidirectional or firestore_to_notion
     "notion_sync": "disabled"
+  },
+
+  "drive": {
+    // Read-only Google Drive folder that mirrors the private data root.
+    // Use a folder id or a https://drive.google.com/drive/folders/ URL.
+    // Scope is https://www.googleapis.com/auth/drive.readonly.
+    "folder_id": "replace-with-your-drive-folder-id",
+
+    // oauth: browser consent. service_account: a Viewer key on this folder.
+    "auth_mode": "oauth",
+
+    "client_secrets_path": "~/.config/job-application-agents/drive-client-secret.json",
+    "token_path": "~/.config/job-application-agents/drive-token.json"
+
+    // "service_account_file": "~/.config/job-application-agents/drive-service-account.json"
   }
 }

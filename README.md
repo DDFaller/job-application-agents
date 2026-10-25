@@ -290,6 +290,23 @@ If Notion is disconnected, run `codex mcp login notion`. If Codex does not show 
 
 See [the complete workflow](docs/job-application-workflow.md) for validation, retries, artifacts, and Notion handoff.
 
+## Google Drive artifact folder
+
+Use a Google Drive folder when application artifacts need to be readable without attaching a second GitHub repository. The folder should contain the same tree as the local data root: `sources/`, `master-curriculum/`, and `applications/`. The connection requests only `https://www.googleapis.com/auth/drive.readonly`. Files download into the private data root and are not written into this repository.
+
+Enable the Google Drive API in the Cloud project. Then either:
+
+- authorize a desktop OAuth client in a browser, reusing the Gmail client JSON by pointing `JAA_DRIVE_CLIENT_SECRETS_PATH` at it; or
+- create a service account, share the folder with its email as Viewer, and provide the key through `JAA_DRIVE_SERVICE_ACCOUNT_FILE` or `JAA_DRIVE_SERVICE_ACCOUNT_JSON`. Use the service account for an unattended cloud agent. Keep the key out of the repository.
+
+```bash
+export JAA_DRIVE_FOLDER_ID="https://drive.google.com/drive/folders/your-folder-id"
+python3 scripts/drive_artifacts.py authorize
+python3 scripts/drive_artifacts.py pull --data-root ~/Documents/job-search
+```
+
+`authorize` opens the browser for OAuth. Service-account mode skips it and uses the key on `status` and `pull`. `pull` writes files whose checksum changed and records `<data-root>/.drive-sync.json`. `status` lists the folder without downloading. Google Docs, Sheets, and shortcuts are skipped.
+
 ## Privacy and safety
 
 Candidate sources and generated applications stay under `~/Documents/job-search` by default and must not be committed. The plugin never invents candidate facts, bypasses portal access controls, or contacts an employer. Application preparation is hands-off and cannot submit. Browser form filling defaults to dry-run; a separately enabled submission deployment additionally requires interactive user confirmation, and `APPLIED` is recorded only after a verified submission receipt.
