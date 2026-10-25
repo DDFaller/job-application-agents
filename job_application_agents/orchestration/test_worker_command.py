@@ -1,4 +1,8 @@
+import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -29,6 +33,16 @@ class WorkerCommandTests(unittest.TestCase):
             self.assertIn("--print", command)
             self.assertNotIn("--prompt-interactive", command)
 
+    def test_agy_flash_default_uses_advertised_variant_without_effort_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            command = build_worker_command(
+                WorkerProfile("agy", "flash", "low"), self.make_task(root),
+                repository_root=root / "repo",
+            )
+            self.assertEqual(command[command.index("--model") + 1], "gemini-3.8-flash-low")
+            self.assertNotIn("--effort", command)
+
     def test_agy_claude_rejects_effort(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
@@ -58,11 +72,72 @@ class WorkerCommandTests(unittest.TestCase):
             self.assertIn("batch-shared artifact may reside under another job key", command[-1])
 
     def test_worker_environment_drops_integration_secrets(self) -> None:
-        from unittest.mock import patch
-        with patch.dict("os.environ", {"NOTION_TOKEN": "secret", "PATH": "/bin"}, clear=True):
+        credentials = {
+            name: "synthetic-value"
+            for name in (
+                "NOTION_TOKEN", "GMAIL_APP_PASSWORD", "GMAIL_PASSWORD",
+                "GMAIL_OAUTH_TOKEN_PATH", "GMAIL_CLIENT_SECRETS_PATH",
+                "FRANCE_TRAVAIL_CLIENT_SECRET", "OPENAI_API_KEY",
+                "JAA_REVIEW_KEY", "JAA_ENABLE_SUBMISSION",
+                "AWS_ACCESS_KEY_ID", "vendor_access_token",
+                "PLAYWRIGHT_STORAGE_STATE", "INTEGRATIONS_CONFIG_FILE",
+            )
+        }
+        safe = {
+            "PATH": "/bin", "HOME": "/synthetic/home", "TERM": "xterm-256color",
+            "DISPLAY": ":99", "JAA_DATA_ROOT": "/synthetic/data",
+            "JAA_RENDER_MODE": "local", "FIRESTORE_EMULATOR_HOST": "127.0.0.1:8080",
+            "JOB_KEY": "fixture-job",
+        }
+        original = {**credentials, **safe}
+        with patch.dict(os.environ, original, clear=True):
             environment = sanitized_worker_environment()
-        self.assertNotIn("NOTION_TOKEN", environment)
-        self.assertEqual(environment["PATH"], "/bin")
+            self.assertEqual(dict(os.environ), original)
+        self.assertEqual(environment, safe)
+
+    def test_worker_entry_point_sanitizes_child_in_both_launch_modes(self) -> None:
+        # The executable is a local stub: no model, credentials or network.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            binary = root / "agy"
+            binary.write_text(
+                f"#!{sys.executable}\n"
+                "import json, os\n"
+                "from pathlib import Path\n"
+                "Path(os.environ['WORKER_ENV_REPORT']).write_text(\n"
+                "    json.dumps(sorted(os.environ)))\n",
+                encoding="utf-8",
+            )
+            binary.chmod(0o700)
+            report = root / "child-env.json"
+            task_path = self.make_task(root)
+            environment = {
+                "PATH": str(root) + os.pathsep + os.defpath,
+                "HOME": str(root), "WORKER_ENV_REPORT": str(report),
+                "JAA_DATA_ROOT": str(root), "TERM": "xterm-256color",
+                "GMAIL_APP_PASSWORD": "synthetic-password",
+                "vendor_access_token": "synthetic-token",
+                "JAA_ENABLE_SUBMISSION": "I_UNDERSTAND_SUBMISSION",
+            }
+            command = [
+                sys.executable, "-m", "job_application_agents.orchestration.worker_command",
+                "--task", str(task_path), "--repository-root", str(root),
+                "--harness", "agy", "--model", "gemini-3.8-flash-high",
+            ]
+            for interactive in (False, True):
+                with self.subTest(interactive=interactive):
+                    report.unlink(missing_ok=True)
+                    completed = subprocess.run(
+                        command + (["--interactive"] if interactive else []),
+                        cwd=Path(__file__).resolve().parents[2], env=environment,
+                        capture_output=True, text=True, timeout=15, check=False,
+                    )
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    child_names = json.loads(report.read_text(encoding="utf-8"))
+                    self.assertTrue({"PATH", "HOME", "TERM", "JAA_DATA_ROOT"}.issubset(child_names))
+                    self.assertTrue({
+                        "GMAIL_APP_PASSWORD", "vendor_access_token", "JAA_ENABLE_SUBMISSION",
+                    }.isdisjoint(child_names))
 
     def test_agy_interactive_uses_dash_i(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

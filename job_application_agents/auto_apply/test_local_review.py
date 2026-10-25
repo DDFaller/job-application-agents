@@ -88,6 +88,9 @@ class TestReviewServer(unittest.TestCase):
         def resume(self):
             return self.snapshot()
 
+        def take_screenshot(self):
+            return b"\xff\xd8\xff\xe0\x00\x10JFIFfakejpeg"
+
     def setUp(self):
         self.session = self.FakeSession()
         self.server = LocalReviewServer(self.session, host="127.0.0.1", port=0, token="test-token")
@@ -108,10 +111,20 @@ class TestReviewServer(unittest.TestCase):
     def test_root_is_public_but_api_requires_token(self):
         response = self.request("/")
         self.assertEqual(200, response.status)
-        self.assertIn(b"Private application review", response.read())
+        self.assertIn(b"Private Application Review", response.read())
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             self.request("/api/session")
         self.assertEqual(401, ctx.exception.code)
+
+    def test_screenshot_requires_auth_and_returns_jpeg(self):
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            self.request("/api/session/screenshot")
+        self.assertEqual(401, ctx.exception.code)
+
+        resp = self.request("/api/session/screenshot", authorized=True)
+        self.assertEqual(200, resp.status)
+        self.assertEqual("image/jpeg", resp.headers.get("Content-Type"))
+        self.assertEqual(b"\xff\xd8\xff\xe0\x00\x10JFIFfakejpeg", resp.read())
 
     def test_authenticated_session_hides_private_paths(self):
         response = self.request("/api/session", authorized=True)

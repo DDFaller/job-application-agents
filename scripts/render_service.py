@@ -220,6 +220,10 @@ def main() -> int:
     args, extra_args = parser.parse_known_args()
     root = Path(__file__).resolve().parent.parent
     cloud = args.cloud or args.live
+    if args.live and args.command in {"up", "compile", "test", "configure"}:
+        sys.path.insert(0, str(root))
+        from job_application_agents.retirement import require_active
+        require_active(os.environ.get("JAA_FIREBASE_PROJECT_ID"))
 
     if args.command == "sync":
         sync_cmd = [sys.executable, str(root / "scripts" / "sync.py"), "status", "--data-root", str(args.data_root)]

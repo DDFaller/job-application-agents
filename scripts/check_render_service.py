@@ -74,9 +74,7 @@ def main() -> int:
                         help="compile via queue and direct paths and compare deterministic outputs")
     args = parser.parse_args()
     if args.direct:
-        from job_application_agents.render_service.client import (
-            RenderServiceClient, direct_worker_ready,
-        )
+        from job_application_agents.render_service.client import direct_worker_ready
         from job_application_agents.render_service.config import render_url
         url = render_url()
         if not direct_worker_ready(url, timeout_seconds=10):

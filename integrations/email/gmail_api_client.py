@@ -218,6 +218,101 @@ class GmailApiClient(BaseEmailClient):
                     ids.append(message_id)
         return ids[:limit]
 
+    def _parse_raw_message(self, message_id: str, response: dict[str, Any]) -> EmailMessage | None:
+        raw_value = response.get("raw")
+        if not raw_value:
+            return None
+        raw_email = base64.urlsafe_b64decode(str(raw_value) + "===")
+        parsed = GmailClient(self.config)._parse_mime_message(
+            message_id, email.message_from_bytes(raw_email)
+        )
+        parsed.folder = self.config.folder
+        return parsed
+
+    def fetch_message(self, gmail_id: str) -> EmailMessage | None:
+        """Fetch exactly one message by Gmail ID without scanning the mailbox."""
+        if not gmail_id:
+            return None
+        if not self.is_connected and not self.connect():
+            logger.error("Cannot fetch message: Gmail API is not connected")
+            return None
+        assert self._service is not None
+        try:
+            response = self._service.users().messages().get(
+                userId="me", id=gmail_id, format="raw"
+            ).execute()
+            return self._parse_raw_message(gmail_id, response)
+        except Exception as exc:
+            self._last_error = str(exc)
+            logger.error("Error fetching Gmail message %s: %s", gmail_id, exc)
+            return None
+
+    def list_history_ids(self, start_history_id: str) -> list[str]:
+        """Return message IDs added since a Gmail historyId (push fan-out)."""
+        if not start_history_id:
+            return []
+        if not self.is_connected and not self.connect():
+            logger.error("Cannot list history: Gmail API is not connected")
+            return []
+        assert self._service is not None
+        try:
+            ids: list[str] = []
+            page_token: str | None = None
+            while True:
+                response = (
+                    self._service.users()
+                    .history()
+                    .list(
+                        userId="me",
+                        startHistoryId=start_history_id,
+                        historyTypes=["messageAdded"],
+                        pageToken=page_token,
+                    )
+                    .execute()
+                )
+                for entry in response.get("history", []):
+                    for added in entry.get("messagesAdded", []):
+                        message_id = str((added.get("message") or {}).get("id") or "")
+                        if message_id and message_id not in ids:
+                            ids.append(message_id)
+                page_token = response.get("nextPageToken")
+                if not page_token:
+                    return ids
+        except Exception as exc:
+            self._last_error = str(exc)
+            logger.error("Error listing Gmail history: %s", exc)
+            return []
+
+    def start_watch(self, topic_name: str) -> dict[str, Any]:
+        """Subscribe a Pub/Sub topic to mailbox changes (7-day expiry, renew)."""
+        if not topic_name:
+            raise ValueError("topic_name is required")
+        if not self.is_connected and not self.connect():
+            raise GmailApiConfigurationError("Gmail API is not connected")
+        assert self._service is not None
+        response = (
+            self._service.users()
+            .watch(userId="me", body={"topicName": topic_name, "labelIds": ["INBOX"]})
+            .execute()
+        )
+        return {
+            "history_id": str(response.get("historyId") or ""),
+            "expiration": str(response.get("expiration") or ""),
+        }
+
+    def stop_watch(self) -> bool:
+        """Remove the mailbox watch."""
+        if not self.is_connected and not self.connect():
+            return False
+        assert self._service is not None
+        try:
+            self._service.users().stop(userId="me").execute()
+            return True
+        except Exception as exc:
+            self._last_error = str(exc)
+            logger.error("Error stopping Gmail watch: %s", exc)
+            return False
+
     def fetch_messages(
         self,
         sender_filters: list[str] | None = None,
@@ -241,15 +336,9 @@ class GmailApiClient(BaseEmailClient):
                 response = self._service.users().messages().get(
                     userId="me", id=message_id, format="raw"
                 ).execute()
-                raw_value = response.get("raw")
-                if not raw_value:
-                    continue
-                raw_email = base64.urlsafe_b64decode(str(raw_value) + "===")
-                parsed = GmailClient(self.config)._parse_mime_message(
-                    message_id, email.message_from_bytes(raw_email)
-                )
-                parsed.folder = self.config.folder
-                messages.append(parsed)
+                parsed = self._parse_raw_message(message_id, response)
+                if parsed is not None:
+                    messages.append(parsed)
             logger.info("Fetched %d messages from Gmail API", len(messages))
             return messages
         except Exception as exc:

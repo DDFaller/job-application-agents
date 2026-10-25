@@ -228,7 +228,7 @@ class IngestedJob:
 
     job_id: str
     job_data: NormalizedJobPosting
-    match_score: int = 0
+    match_score: int | None = None
     match_rating: str = "Medium Match"  # "High Match", "Medium Match", "Low Match"
     match_breakdown: dict[str, Any] = field(default_factory=dict)
     staging_dir: str | None = None
@@ -239,6 +239,7 @@ class IngestedJob:
     )
     status: str = "STAGED"  # "STAGED", "MATCHED", "SKIPPED", "QUEUED", "APPLIED", "FAILED"
     notes: str = ""
+    source_text: str = field(default="", repr=False)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -276,6 +277,7 @@ class IngestionResult:
     total_high_matches: int = 0
     total_medium_matches: int = 0
     total_low_matches: int = 0
+    total_unassessed: int = 0
     jobs: list[IngestedJob] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     duration_seconds: float = 0.0
@@ -334,6 +336,7 @@ class IngestionResult:
             "total_high_matches": self.total_high_matches,
             "total_medium_matches": self.total_medium_matches,
             "total_low_matches": self.total_low_matches,
+            "total_unassessed": self.total_unassessed,
             "jobs_count": len(self.jobs),
             "jobs": [j.to_dict() for j in self.jobs],
             "errors": self.errors,

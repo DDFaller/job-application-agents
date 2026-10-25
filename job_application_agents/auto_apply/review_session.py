@@ -448,6 +448,14 @@ class PlaywrightReviewSession:
 
         return SubmissionVerifier.evaluate(self.page, initial_url=self.draft.target_url)
 
+    def take_screenshot(self) -> bytes:
+        """Capture a live viewport screenshot of the current Playwright page."""
+        with self._lock:
+            try:
+                return self.page.screenshot(type="jpeg", quality=85)
+            except Exception as exc:
+                raise ReviewSessionError(f"Failed to capture screenshot: {exc}") from exc
+
 
 def public_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Remove local filesystem paths before a snapshot is sent to the phone."""

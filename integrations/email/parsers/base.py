@@ -21,8 +21,15 @@ class HTMLTextExtractor(HTMLParser):
         self.links: list[tuple[str, str]] = []  # (href, text)
         self._current_href: str | None = None
         self._current_link_text: list[str] = []
+        self._ignored_tags: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag = tag.lower()
+        if tag in ("script", "style", "template", "noscript"):
+            self._ignored_tags.append(tag)
+            return
+        if self._ignored_tags:
+            return
         if tag.lower() == "a":
             for attr, val in attrs:
                 if attr.lower() == "href" and val:
@@ -33,6 +40,10 @@ class HTMLTextExtractor(HTMLParser):
             self.fed.append("\n")
 
     def handle_endtag(self, tag: str) -> None:
+        if self._ignored_tags:
+            if tag.lower() == self._ignored_tags[-1]:
+                self._ignored_tags.pop()
+            return
         if tag.lower() == "a" and self._current_href:
             link_text = "".join(self._current_link_text).strip()
             self.links.append((self._current_href, link_text))
@@ -42,6 +53,8 @@ class HTMLTextExtractor(HTMLParser):
             self.fed.append("\n")
 
     def handle_data(self, d: str) -> None:
+        if self._ignored_tags:
+            return
         self.fed.append(d)
         if self._current_href is not None:
             self._current_link_text.append(d)

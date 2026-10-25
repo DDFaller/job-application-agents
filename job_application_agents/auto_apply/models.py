@@ -17,9 +17,9 @@ class CandidateProfile:
     linkedin_url: str = ""
     github_url: str = ""
     portfolio_url: str = ""
-    work_authorization: str = "Authorized"
-    requires_sponsorship: bool = False
-    notice_period_weeks: int = 4
+    work_authorization: str | None = None
+    requires_sponsorship: bool | None = None
+    notice_period_weeks: int | None = None
     salary_expectation: str | None = None
     custom_answers: dict[str, str] = field(default_factory=dict)
 
@@ -29,6 +29,10 @@ class CandidateProfile:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> CandidateProfile:
+        sponsorship = data.get("requires_sponsorship")
+        if sponsorship is not None and not isinstance(sponsorship, bool):
+            raise ValueError("requires_sponsorship must be a boolean or null")
+        notice = data.get("notice_period_weeks")
         return cls(
             first_name=str(data.get("first_name", "")),
             last_name=str(data.get("last_name", "")),
@@ -38,9 +42,9 @@ class CandidateProfile:
             linkedin_url=str(data.get("linkedin_url", "")),
             github_url=str(data.get("github_url", "")),
             portfolio_url=str(data.get("portfolio_url", "")),
-            work_authorization=str(data.get("work_authorization", "Authorized")),
-            requires_sponsorship=bool(data.get("requires_sponsorship", False)),
-            notice_period_weeks=int(data.get("notice_period_weeks", 4)),
+            work_authorization=data.get("work_authorization"),
+            requires_sponsorship=sponsorship,
+            notice_period_weeks=int(notice) if notice is not None else None,
             salary_expectation=data.get("salary_expectation"),
             custom_answers=dict(data.get("custom_answers", {})),
         )

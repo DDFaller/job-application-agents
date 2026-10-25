@@ -16,9 +16,25 @@ from job_application_agents.sync.firestore import FirestoreUserSyncRepository
 
 from .handlers import (
     handle_firestore_application_write,
+    handle_gmail_push,
     handle_notion_webhook,
     reconcile_notion,
 )
+
+
+def _gmail_push_pipeline():
+    """Build a Gmail-API ingestion pipeline from environment configuration."""
+    from integrations.email.factory import create_email_client
+    from integrations.models import EmailAccountConfig
+    from integrations.pipeline.orchestrator import JobIngestionPipeline
+
+    account = EmailAccountConfig(
+        auth_mode="gmail_api",
+        folder=os.environ.get("GMAIL_FOLDER", "INBOX"),
+        client_secrets_path=os.environ.get("GMAIL_CLIENT_SECRETS_PATH") or None,
+        oauth_token_path=os.environ.get("GMAIL_OAUTH_TOKEN_PATH") or None,
+    )
+    return JobIngestionPipeline(email_client=create_email_client(account))
 
 
 def _repositories() -> tuple[FirestoreUserSyncRepository, FirestoreNotionJobRepository]:
@@ -100,7 +116,44 @@ try:
             notion_repository=notion_repo,
         )
 
-    @scheduler_fn.on_schedule(schedule="every 1 minutes", secrets=["NOTION_TOKEN"])
+    @https_fn.on_request(secrets=["GMAIL_PUSH_TOKEN"])
+    def gmail_push(request: Any) -> Any:
+        """Pub/Sub push endpoint for Gmail watch notifications (no scan)."""
+        from integrations.email.gmail_api_client import GmailApiClient
+
+        envelope = request.get_json(silent=True) or {}
+        token = request.args.get("token") or request.headers.get("X-Gmail-Push-Token")
+        try:
+            pipeline = _gmail_push_pipeline()
+            client = pipeline.email_client
+            if not isinstance(client, GmailApiClient):
+                primary = getattr(client, "primary", None)
+                client = primary if isinstance(primary, GmailApiClient) else None
+            if client is None:
+                return https_fn.Response(
+                    json.dumps({"error": "Gmail API transport unavailable"}),
+                    status=500, mimetype="application/json",
+                )
+            result = handle_gmail_push(
+                envelope=envelope,
+                verification_token=token,
+                expected_token=os.environ.get("GMAIL_PUSH_TOKEN", ""),
+                gmail_client=client,
+                run_ingestion=lambda ids: pipeline.run_ingestion(only_gmail_ids=ids),
+            )
+            return https_fn.Response(json.dumps(result), status=200, mimetype="application/json")
+        except PermissionError as exc:
+            return https_fn.Response(json.dumps({"error": str(exc)}), status=401, mimetype="application/json")
+        except ValueError as exc:
+            return https_fn.Response(json.dumps({"error": str(exc)}), status=400, mimetype="application/json")
+        except Exception as exc:
+            return https_fn.Response(json.dumps({"error": str(exc)}), status=500, mimetype="application/json")
+
+    # Safety-net sweep only: jobs are enqueued at event time by the Firestore
+    # trigger (on_application_written), the Notion webhook, and the hourly
+    # reconcile. A 5-minute cadence (was 1 minute) cuts idle invocations ~12x
+    # while bounding projection lag; Firestore-triggered claims stay immediate.
+    @scheduler_fn.on_schedule(schedule="every 5 minutes", secrets=["NOTION_TOKEN"])
     def drain_notion_sync_queue(event: Any) -> None:
         """Process a bounded batch so cloud deployment is self-sufficient."""
         del event
@@ -128,3 +181,4 @@ except ImportError:
     notion_webhook = None
     reconcile_notion_sync = None
     drain_notion_sync_queue = None
+    gmail_push = None

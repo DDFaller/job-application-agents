@@ -18,6 +18,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from job_application_agents.auto_apply import AutoApplyService
+from job_application_agents.auto_apply.browser import BROWSER_BACKENDS
 
 
 def main() -> int:
@@ -53,6 +54,12 @@ def main() -> int:
         default=45000,
         help="Page timeout in milliseconds (default: 45000).",
     )
+    parser.add_argument("--browser", choices=BROWSER_BACKENDS, default="playwright")
+    parser.add_argument("--browser-profile", type=Path, help="Private persistent profile directory; use a separate directory per engine")
+    parser.add_argument("--data-root", type=Path, help="Private root containing the website exclusion ledger")
+    parser.add_argument("--resume", type=Path, help="Exact reviewed CV to upload")
+    parser.add_argument("--letter", type=Path, help="Exact reviewed motivation letter to upload")
+    parser.add_argument("--headed", action="store_true", help="Show the browser even during a dry-run")
 
     args = parser.parse_args()
 
@@ -65,6 +72,12 @@ def main() -> int:
         mode=args.mode,
         timeout_ms=args.timeout,
         allow_submission=args.allow_submit,
+        browser_backend=args.browser,
+        browser_profile=args.browser_profile,
+        data_root=args.data_root,
+        resume_path=args.resume,
+        letter_path=args.letter,
+        headed=args.headed,
     )
 
     return 0 if receipt.success else 1

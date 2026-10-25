@@ -189,6 +189,33 @@ class TestEmailParsers(unittest.TestCase):
         self.assertEqual(len(jobs), 1)
         self.assertEqual(jobs[0].title, "Software Engineer role")
 
+    def test_generic_parser_ignores_linkedin_social_hiring_content(self) -> None:
+        msg = EmailMessage(
+            uid="social", message_id="social", sender="newsletter@example.org",
+            recipient="candidate@example.com", subject="Network update", date_str="",
+            body_html="""
+                <a href="https://www.linkedin.com/comm/feed/update/urn:li:activity:1234567890">We are hiring a Software Engineer</a>
+                <a href="https://fr.linkedin.com/posts/team-hiring">New job opening</a>
+                <a href="https://www.linkedin.com/in/recruiter">Engineering opportunities</a>
+                <a href="https://www.linkedin.com/jobs/search/">Browse engineer jobs</a>
+                <a href="https://careers.example.org/openings/backend">Backend Engineer</a>
+            """,
+        )
+        jobs = EmailParserRegistry().parse_message(msg)
+        self.assertEqual([job.canonical_url for job in jobs], ["https://careers.example.org/openings/backend"])
+
+    def test_generic_parser_retains_direct_linkedin_job_variants(self) -> None:
+        for path in ("/jobs/view/1234567890", "/comm/jobs/view/1234567890/", "/jobs/view/python-engineer-1234567890"):
+            with self.subTest(path=path):
+                msg = EmailMessage(
+                    uid="job", message_id="job", sender="newsletter@example.org",
+                    recipient="candidate@example.com", subject="Role", date_str="",
+                    body_html=f'<a href="https://fr.linkedin.com{path}">Python Engineer</a>',
+                )
+                jobs = GenericJobAlertParser().parse_jobs(msg)
+                self.assertEqual(len(jobs), 1)
+                self.assertEqual(jobs[0].canonical_url, f"https://fr.linkedin.com{path}")
+
 
 if __name__ == "__main__":
     unittest.main()

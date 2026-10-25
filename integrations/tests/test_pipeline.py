@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from integrations.base import BaseEmailClient, BaseJobScraper
-from integrations.models import EmailAccountConfig, EmailMessage, ScrapedJobContent
+from integrations.models import EmailAccountConfig, EmailMessage, IngestedJob, JobAlertItem, NormalizedJobPosting, ScrapedJobContent
 from integrations.pipeline.destinations import FileSystemStagingDestination
 from integrations.pipeline.orchestrator import JobIngestionPipeline
 
@@ -75,6 +76,36 @@ Requirements:
 
 
 class TestJobIngestionPipeline(unittest.TestCase):
+
+    def test_denied_posting_is_not_scored_or_staged(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            scraper = MagicMock(spec=BaseJobScraper)
+            scraper.scrape.return_value = ScrapedJobContent(
+                source_url="https://example.test/job/1", canonical_url="https://example.test/job/1",
+                status_code=403, error_message="Access denied",
+            )
+            destination = MagicMock()
+            pipeline = JobIngestionPipeline(
+                email_client=MagicMock(spec=BaseEmailClient), scraper=scraper,
+                destinations=[destination], ledger_path=Path(tmpdir)/"ledger.json",
+            )
+            with patch("integrations.pipeline.orchestrator.JobMatchScorer.score_job") as score:
+                result = pipeline._process_single_job_alert(
+                    JobAlertItem(title="Engineer", company="Example", canonical_url="https://example.test/job/1"),
+                    min_score=0, dry_run=False,
+                )
+            self.assertEqual(result.status, "FAILED")
+            score.assert_not_called()
+            destination.stage_job.assert_not_called()
+
+    def test_staging_rejects_changed_source_instead_of_replacing_its_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            posting = NormalizedJobPosting(company="Example", role="Engineer", source_sha256="0"*64)
+            job = IngestedJob(job_id="1", job_data=posting, source_text="Changed evidence")
+            self.assertFalse(FileSystemStagingDestination(Path(tmpdir)).stage_job(job))
+            self.assertEqual(job.status, "FAILED")
+            self.assertEqual(posting.source_sha256, "0"*64)
+            self.assertFalse(list(Path(tmpdir).rglob("job.json")))
 
     def test_end_to_end_pipeline(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -144,13 +175,14 @@ class TestJobIngestionPipeline(unittest.TestCase):
             self.assertEqual(result.total_emails_scanned, 1)
             self.assertEqual(result.total_jobs_found, 2)
             self.assertEqual(result.total_jobs_scraped, 2)
-            self.assertEqual(result.total_jobs_staged, 1)  # Only Gorgias (94) matches >=85
-            self.assertGreaterEqual(result.total_high_matches + result.total_medium_matches, 1)
+            self.assertEqual(result.total_jobs_staged, 2)  # Unassessed jobs survive the threshold.
+            self.assertEqual(result.total_unassessed, 2)
+            self.assertEqual(result.total_high_matches + result.total_medium_matches + result.total_low_matches, 0)
 
             # Inspect staged directory
             staged_dirs = list(staging_base.glob("*"))
-            self.assertEqual(len(staged_dirs), 1)
-            staged_folder = staged_dirs[0]
+            self.assertEqual(len(staged_dirs), 2)
+            staged_folder = next(p for p in staged_dirs if json.loads((p / "job.json").read_text())["company"] == "Gorgias")
 
             job_json = staged_folder / "job.json"
             source_md = staged_folder / "source.md"
@@ -164,9 +196,16 @@ class TestJobIngestionPipeline(unittest.TestCase):
             self.assertEqual(job_data["company"], "Gorgias")
             self.assertEqual(job_data["role"], "Senior AI Platform Engineer")
             self.assertEqual(job_data["source_job_id"], "4422257733")
+            source = source_md.read_text(encoding="utf-8")
+            self.assertIn("Design and build high-scale Kubernetes infrastructure", source)
+            self.assertEqual(job_data["source_sha256"], hashlib.sha256(source_md.read_bytes()).hexdigest())
+            for quotes in job_data["field_evidence"].values():
+                for quote in quotes:
+                    self.assertIn(quote, source)
 
             match_data = json.loads(match_json.read_text(encoding="utf-8"))
-            self.assertGreaterEqual(match_data["total_score"], 60)
+            self.assertIsNone(match_data["total_score"])
+            self.assertFalse(match_data["assessed"])
 
     def test_dry_run_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -207,6 +246,57 @@ class TestJobIngestionPipeline(unittest.TestCase):
 
             self.assertEqual(result.total_jobs_staged, 0)
             self.assertFalse(staging_base.exists() and list(staging_base.glob("*")))
+
+    def test_targeted_ids_bypass_mailbox_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            staging_base = Path(tmpdir) / "staging_job"
+
+            mock_msg = EmailMessage(
+                uid="gmail-1",
+                message_id="msg-gmail-1",
+                sender="jobalerts-noreply@linkedin.com",
+                recipient="candidate@example.com",
+                subject="1 job alert",
+                date_str="2026-08-26",
+                body_html=SAMPLE_EMAIL_HTML,
+            )
+            mock_email_client = MagicMock(spec=BaseEmailClient)
+            mock_email_client.fetch_message.side_effect = lambda gid: (
+                mock_msg if gid == "gmail-1" else None
+            )
+
+            mock_scraper = MagicMock(spec=BaseJobScraper)
+            mock_scraper.scrape.return_value = ScrapedJobContent(
+                source_url="https://www.linkedin.com/jobs/view/4422257733",
+                canonical_url="https://www.linkedin.com/jobs/view/4422257733",
+                title="Senior AI Platform Engineer",
+                company="Gorgias",
+                location="Paris, France",
+                visible_text=SAMPLE_GORGIAS_PAGE,
+                status_code=200,
+            )
+
+            destination = FileSystemStagingDestination(base_staging_dir=staging_base)
+            pipeline = JobIngestionPipeline(
+                email_client=mock_email_client,
+                scraper=mock_scraper,
+                max_experience_years=None,
+                destinations=[destination],
+                ledger_path=staging_base.parent / "processed_emails.json",
+            )
+
+            result = pipeline.run_ingestion(
+                only_gmail_ids=["gmail-1", "missing-id"], min_match_score=0
+            )
+
+            mock_email_client.fetch_messages.assert_not_called()
+            self.assertEqual(result.total_emails_scanned, 1)
+            self.assertEqual(result.total_jobs_staged, 2)
+
+            # Redelivery of the same push is a ledger hit, not reprocessing.
+            redelivery = pipeline.run_ingestion(only_gmail_ids=["gmail-1"])
+            self.assertEqual(redelivery.total_emails_skipped_already_checked, 1)
+            self.assertEqual(redelivery.total_jobs_staged, 0)
 
 
 if __name__ == "__main__":

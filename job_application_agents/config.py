@@ -240,7 +240,7 @@ def _required_string(value: Any, field: str) -> str | None:
 class StorageConfig:
     # Local files are always retained as the artifact/evidence store.  The
     # backend names describe the optional application-status integration.
-    application_backend: str = "notion_only"
+    application_backend: str = "firestore_only"
     notion_sync: str = "disabled"
     data_root: Path | None = None
     applications_root: Path | None = None
@@ -256,7 +256,7 @@ def load_storage_config(
     env = os.environ if environ is None else environ
     config = load_json_config(path)
     backend = _env(env, "JAA_APPLICATION_BACKEND", "APPLICATION_BACKEND")
-    backend = backend or _configured(config, "application_backend") or "notion_only"
+    backend = backend or _configured(config, "application_backend") or "firestore_only"
     if backend not in APPLICATION_BACKENDS:
         raise ConfigurationError(
             f"application_backend must be one of: {', '.join(APPLICATION_BACKENDS)}"

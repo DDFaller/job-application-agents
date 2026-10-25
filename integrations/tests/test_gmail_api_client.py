@@ -49,21 +49,52 @@ class _MessagesResource:
         return _Request({})
 
 
+class _HistoryResource:
+    def __init__(self, pages: list[dict]) -> None:
+        self.pages = pages
+        self.list_calls: list[dict] = []
+
+    def list(self, **kwargs: object) -> _Request:
+        self.list_calls.append(kwargs)
+        index = len(self.list_calls) - 1
+        page = dict(self.pages[min(index, len(self.pages) - 1)])
+        if index < len(self.pages) - 1:
+            page["nextPageToken"] = f"token-{index}"
+        return _Request(page)
+
+
 class _UsersResource:
-    def __init__(self, messages: _MessagesResource) -> None:
+    def __init__(self, messages: _MessagesResource, history: _HistoryResource | None = None) -> None:
         self._messages = messages
+        self._history = history or _HistoryResource([{"history": []}])
+        self.watch_calls: list[dict] = []
+        self.stop_calls: list[dict] = []
 
     def messages(self) -> _MessagesResource:
         return self._messages
+
+    def history(self) -> _HistoryResource:
+        return self._history
+
+    def watch(self, **kwargs: object) -> _Request:
+        self.watch_calls.append(kwargs)
+        return _Request({"historyId": "999", "expiration": "12345"})
+
+    def stop(self, **kwargs: object) -> _Request:
+        self.stop_calls.append(kwargs)
+        return _Request({})
 
     def getProfile(self, **kwargs: object) -> _Request:
         return _Request({"emailAddress": "candidate@example.com"})
 
 
 class _FakeGmailService:
-    def __init__(self, raw_messages: dict[str, str]) -> None:
+    def __init__(self, raw_messages: dict[str, str], history_pages: list[dict] | None = None) -> None:
         self.messages = _MessagesResource(raw_messages)
-        self._users = _UsersResource(self.messages)
+        self._users = _UsersResource(
+            self.messages,
+            _HistoryResource(history_pages) if history_pages is not None else None,
+        )
 
     def users(self) -> _UsersResource:
         return self._users
@@ -196,6 +227,52 @@ class TestGmailApiClient(unittest.TestCase):
         with patch.object(client, "_credentials", side_effect=RuntimeError("no cached token")) as credentials:
             self.assertFalse(client.connect())
         credentials.assert_called_once_with(interactive=False)
+
+    def test_fetch_message_gets_single_id_without_scanning(self) -> None:
+        service = _FakeGmailService({"message-9": _raw_linkedin_message()})
+        client = GmailApiClient(
+            EmailAccountConfig(folder="INBOX", auth_mode="gmail_api"), service=service
+        )
+
+        message = client.fetch_message("message-9")
+
+        self.assertIsNotNone(message)
+        assert message is not None
+        self.assertEqual(message.uid, "message-9")
+        self.assertEqual(service.messages.list_calls, [])
+        self.assertEqual(service.messages.get_calls[0]["id"], "message-9")
+        self.assertIsNone(client.fetch_message(""))
+
+    def test_list_history_ids_pages_and_dedupes(self) -> None:
+        pages = [
+            {"history": [{"messagesAdded": [{"message": {"id": "a"}}, {"message": {"id": "b"}}]}]},
+            {"history": [{"messagesAdded": [{"message": {"id": "b"}}, {"message": {"id": "c"}}]}]},
+        ]
+        service = _FakeGmailService({}, history_pages=pages)
+        client = GmailApiClient(EmailAccountConfig(auth_mode="gmail_api"), service=service)
+
+        self.assertEqual(client.list_history_ids("100"), ["a", "b", "c"])
+        self.assertEqual(service.users().history().list_calls[0]["startHistoryId"], "100")
+        self.assertEqual(
+            service.users().history().list_calls[0]["historyTypes"], ["messageAdded"]
+        )
+        self.assertEqual(client.list_history_ids(""), [])
+
+    def test_start_and_stop_watch(self) -> None:
+        service = _FakeGmailService({})
+        client = GmailApiClient(EmailAccountConfig(auth_mode="gmail_api"), service=service)
+
+        watch = client.start_watch("projects/p/topics/gmail")
+
+        self.assertEqual(watch["history_id"], "999")
+        self.assertTrue(watch["expiration"])
+        self.assertEqual(
+            service.users().watch_calls[0]["body"]["topicName"], "projects/p/topics/gmail"
+        )
+        self.assertTrue(client.stop_watch())
+        self.assertEqual(len(service.users().stop_calls), 1)
+        with self.assertRaises(ValueError):
+            client.start_watch("")
 
 
 class _FakeImapClient:

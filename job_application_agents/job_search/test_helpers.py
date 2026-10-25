@@ -12,13 +12,19 @@ from job_application_agents.job_search.reports import build_report, render_html_
 
 
 class TestJobSearchHelpers(unittest.TestCase):
+    def test_unscored_jobs_remain_visible_even_with_threshold(self):
+        ranked = rank_jobs([{'company': 'A', 'role': 'Engineer'}], min_score=80)
+        self.assertEqual(len(ranked), 1)
+        self.assertIsNone(ranked[0]['score'])
+        self.assertEqual(ranked[0]['rating'], 'Not assessed')
+
     def test_ranking_deduplicates_and_sorts(self):
         jobs = [
             {"company": "A", "role": "Software Engineer", "canonical_url": "https://a/job", "technologies": ["Python"]},
             {"company": "A", "role": "Software Engineer", "canonical_url": "https://a/job/", "technologies": ["Python"]},
             {"company": "B", "role": "Data Engineer", "canonical_url": "https://b/job", "technologies": ["Kubernetes"]},
         ]
-        ranked = rank_jobs(jobs, top=5)
+        ranked = rank_jobs(jobs, candidate={"skills": ["Python"]}, top=5)
         self.assertEqual(len(ranked), 2)
         self.assertGreaterEqual(ranked[0]["score"], ranked[1]["score"])
         self.assertTrue(ranked[0]["triage_only"])

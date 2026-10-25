@@ -10,6 +10,8 @@ from job_application_agents.orchestration.contracts import (
     StageResult,
     StageTask,
     WorkerProfile,
+    fingerprint_artifacts,
+    is_source_artifact,
 )
 
 
@@ -59,6 +61,31 @@ class ContractTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(ValueError, "requires a retryable"):
                 result.validate_for(task, verify_files=False)
+
+    def test_source_fingerprint_ignores_derived_outputs(self) -> None:
+        base = [
+            {"name": "source:backend:experience.md", "path": "/d/exp.md", "sha256": "a"},
+            {"name": "job.json", "path": "/d/job.json", "sha256": "b"},
+        ]
+        same_sources = [
+            {"name": "job.json", "path": "/d/job.json", "sha256": "CHANGED"},
+            {"name": "review.json", "path": "/d/review.json", "sha256": "c"},
+            {"name": "source:backend:experience.md", "path": "/d/exp.md", "sha256": "a"},
+        ]
+        changed_source = [
+            {"name": "source:backend:experience.md", "path": "/d/exp.md", "sha256": "ZZZ"},
+        ]
+        self.assertTrue(is_source_artifact("source:backend:experience.md"))
+        self.assertTrue(is_source_artifact("candidate-source:skills.md"))
+        self.assertFalse(is_source_artifact("job.json"))
+        self.assertEqual(
+            fingerprint_artifacts(base, source_only=True),
+            fingerprint_artifacts(same_sources, source_only=True),
+        )
+        self.assertNotEqual(
+            fingerprint_artifacts(base, source_only=True),
+            fingerprint_artifacts(changed_source, source_only=True),
+        )
 
     def test_worker_extra_args_cannot_override_managed_flags(self) -> None:
         with self.assertRaisesRegex(ValueError, "cannot override"):

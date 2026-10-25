@@ -13,7 +13,7 @@ In standard batches, candidate information is organized under `~/Documents/job-s
 - `languages.md` — spoken languages and verified proficiency levels.
 - `pre-formatted.tex` — authoritative 1-page XeLaTeX CV reference demonstrating optimal phrasing, structure, formatting, and page-budget allocation.
 
-1. **Role Profile Selection**: The controller or agent resolves the matching profile folder (e.g., `backend-engineer`, `ai-platform-engineer`) using `job_application_agents.sources.match_role_profile()`.
+1. **Role Profile Selection**: New batches use the evidence-bound `profile-selection` stage and its approved positioning library, not profile-name keyword matching. The library references canonical source folders without duplicating facts. `match_role_profile()` remains only a legacy helper.
 2. **Reference Alignment**: The author consults `pre-formatted.tex` for the profile to model section ordering, entry formats, and bullet phrasing.
 3. **Targeted Tailoring**: Select and prioritize the most relevant experience and skills for the opening, while preserving truthful baseline context (education, languages, core contact).
 4. **Validation**: The authored bundle is validated with `validate_bundle.py`. When candidate evidence is omitted, strict `E###` citation gates are bypassed while structural and document gates remain enforced.
@@ -52,6 +52,16 @@ not fall back to a generic résumé.
 - `unclear`: the extracted duties do not support a confident classification.
 
 Use `technical` or `balanced` focus for computing jobs, `transferable` or `balanced` for non-computing jobs, `balanced` or `transferable` for mixed jobs, and `conservative` for unclear jobs.
+
+## Cover-letter narrative order
+
+Always organize the letter body in this order, after the salutation:
+
+1. **Introduce the candidate.** Open in the first person with the candidate's professional positioning, a concise relevant background, and the role sought. Do not open with the company's needs or a technical achievement inventory.
+2. **Explain the attraction to the company.** Identify one or two concrete aspects of the company, team, product, or work described in the supplied sources, and explain their appeal. Avoid generic praise, invented personal passions, unsupported company claims, or pretending to have followed the company for years.
+3. **Demonstrate the mutual fit.** Connect specific company or role needs to a small number of supported candidate examples and the contribution those examples enable. Make the relationship explicit rather than listing matching technologies or repeating the CV.
+
+Close with a brief invitation to discuss the role. Keep the letter within one readable page, preserve truthful language levels and other necessary qualifications, and retain internal citations for both candidate and company claims. The three moves should read as connected prose, without visible section labels. Humanization and review must preserve and check this order.
 
 ## Evidence selection
 
@@ -103,3 +113,5 @@ Start from the actual duties. Prefer supported evidence of reliability, customer
 Example: for a warehouse role that stresses accurate order handling and teamwork, a supported history of careful operational processes and collaboration can be selected; an unrelated framework list should be deprioritized. For customer service, supported communication and language facts may lead; backend architecture should not.
 
 When classification is unclear, use a conservative focus, avoid speculative tailoring, and surface the uncertainty in the selection rationale.
+
+For schema-2 profile selections, `decision: review` describes assessment, not rejection. The controller records an explicit preparation choice separately. Preserve all gaps from `fit-report.json`; do not reapply legacy eligibility gates or fabricate evidence to close gaps.

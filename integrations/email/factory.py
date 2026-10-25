@@ -81,6 +81,15 @@ class FallbackEmailClient(BaseEmailClient):
             return False
         return self._active.mark_as_read(uids)
 
+    def fetch_message(self, gmail_id: str) -> EmailMessage | None:
+        client = self._active if self.is_connected else self._connect_preferred()
+        if client is None:
+            return None
+        try:
+            return client.fetch_message(gmail_id)
+        except NotImplementedError:
+            return None
+
 
 def create_email_client(config: EmailAccountConfig) -> BaseEmailClient:
     """Create the configured Gmail API client with optional IMAP fallback."""

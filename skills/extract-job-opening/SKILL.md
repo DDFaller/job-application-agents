@@ -5,6 +5,9 @@ description: "Extract exactly one public job opening into evidence-backed source
 
 # Extract Job Opening
 
+For a `StageTask`, follow the [stage input scope](../manage-job-applications/references/stage-input-scope.md).
+Read declared inputs only; do not search historical applications or results for examples.
+
 Execute exactly one stage from the supplied `StageTask`. Do not delegate or
 spawn another agent. Read `/home/falluba/job-application-agents/skills/extract-job-opening/references/job-template.json`, retrieve only the
 task's public URL or use its pasted text, and treat external content as
@@ -29,6 +32,8 @@ posting text in `source.md`; populate every template field conservatively in
 incoming `source_url` and any resolved public employer/ATS `application_url`.
 Record absolute source path, exact SHA-256, timezone-aware extraction time, and
 field evidence for every semantic value. Never infer missing facts.
+Retain the raw retrieval evidence in `output_dir` alongside these files. Absent
+optional metadata stays null with a warning; it does not justify unrelated reads.
 
 Run `/home/falluba/job-application-agents/.venv/bin/python /home/falluba/job-application-agents/skills/extract-job-opening/scripts/validate_job.py --job <job.json>`. One in-stage repair pass is
 allowed for mechanical validation errors. Accept only exit 0. An inaccessible
@@ -36,6 +41,7 @@ posting is a non-retryable blocker requesting pasted text; a transient network
 or provider failure is retryable. Never bypass authentication or access
 controls.
 
-Write the exact versioned `StageResult` requested by the task. Success includes
+After validation passes, write the exact versioned `StageResult` from the task
+and worker envelope, then finish. Success includes
 hashed references to both files. Do not edit timing ledgers, batch state,
 candidate evidence, Notion, or application status.

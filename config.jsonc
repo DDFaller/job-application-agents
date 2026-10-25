@@ -33,11 +33,11 @@
   },
 
   "storage": {
-    // notion_only: local artifacts plus Notion status/control (default)
+    // firestore_only: Firestore canonical storage (default)
+    // firestore_notion: Firestore canonical storage synchronized with Notion
+    // notion_only: local artifacts plus Notion status/control
     // local_only: local application files only, without Notion
-    // firestore_notion: opt-in Firestore canonical storage synchronized with Notion
-    // firestore_only: opt-in Firestore records only
-    "application_backend": "notion_only",
+    "application_backend": "firestore_only",
 
     // disabled is the default; cloud users may select bidirectional or firestore_to_notion
     "notion_sync": "disabled"

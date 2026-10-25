@@ -51,6 +51,10 @@ class BaseEmailClient(ABC):
         """Mark specified messages as read / seen."""
         pass
 
+    def fetch_message(self, gmail_id: str) -> EmailMessage | None:
+        """Fetch exactly one message by provider ID without a mailbox scan."""
+        raise NotImplementedError(f"{type(self).__name__} does not support targeted fetch")
+
 
 class BaseEmailParser(ABC):
     """Abstract interface for parsing job alert emails into structured leads."""

@@ -16,7 +16,7 @@ from typing import Any
 SCHEMA_VERSION = 2
 STATUS_HEARTBEAT_SECONDS = 45
 EVENT_KINDS = ("active", "wait", "queue", "remote")
-TERMINAL_RUN_STATUSES = ("prepared", "needs_input", "failed", "cancelled")
+TERMINAL_RUN_STATUSES = ("prepared", "needs_input", "failed", "cancelled", "skipped")
 RUN_STATUSES = ("running",) + TERMINAL_RUN_STATUSES
 
 

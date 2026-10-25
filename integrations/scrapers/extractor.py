@@ -7,6 +7,8 @@ import hashlib
 import json
 from pathlib import Path
 import re
+from urllib.parse import urlparse
+from ..email.parsers.base import strip_tracking_params
 from ..models import JobAlertItem, NormalizedJobPosting, ScrapedJobContent
 from ..pipeline.experience_prefilter import parse_experience_years
 
@@ -40,6 +42,16 @@ EMPLOYMENT_TYPE_PATTERNS = {
 }
 
 
+def _public_job_url(url: str) -> str:
+    """Keep public job identity without email authentication or tracking data."""
+    parsed = urlparse(url)
+    if parsed.hostname == "linkedin.com" or (parsed.hostname or "").endswith(".linkedin.com"):
+        match = re.search(r"/(?:comm/)?jobs/view/(\d+)", parsed.path)
+        if match:
+            return f"https://www.linkedin.com/jobs/view/{match.group(1)}"
+    return strip_tracking_params(url)
+
+
 class JobPostingExtractor:
     """Structures scraped web content into canonical, validated job.json and source.md."""
 
@@ -64,24 +76,62 @@ class JobPostingExtractor:
             source_doc_path = str(source_file.resolve())
 
         # Resolve core fields
-        company = scraped.company or (alert_hint.company if alert_hint else "") or "Company"
-        role = scraped.title or (alert_hint.title if alert_hint else "") or "Software Engineer"
-        location = scraped.location or (alert_hint.location if alert_hint else "") or "Paris, France"
+        company = scraped.company or (alert_hint.company if alert_hint else "") or ""
+        role = scraped.title or (alert_hint.title if alert_hint else "") or ""
+        location = scraped.location or (alert_hint.location if alert_hint else "") or ""
 
-        # Clean title if it contains company or pipe
-        if " at " in role:
-            role = role.split(" at ", 1)[0].strip()
+        # Unescape HTML entities (e.g. &amp; -> &)
+        import html
+        role = html.unescape(html.unescape(role)).strip()
+        if company:
+            company = html.unescape(html.unescape(company)).strip()
+
+        # Extract location embedded in company string (e.g. "Alarm.com — Cracow, Poland | LinkedIn Jobs")
+        if " — " in company:
+            parts = company.split(" — ", 1)
+            company = parts[0].strip()
+            if not location:
+                loc_cand = re.sub(r"\s*\|.*$", "", parts[1]).strip()
+                if loc_cand:
+                    location = loc_cand
+
+        company = re.sub(r"\s*(?:—|\|).*$", "", company).strip()
+        location = re.sub(r"\s*\|.*$", "", location).strip()
+
+        # Parse LinkedIn pattern "<Company> hiring <Role> in <Location>"
+        hiring_match = re.match(r"^(.+?)\s+hiring\s+(.+?)(?:\s+in\s+(.+))?$", role, re.IGNORECASE)
+        if hiring_match:
+            detected_company = hiring_match.group(1).strip()
+            detected_role = hiring_match.group(2).strip()
+            detected_loc = hiring_match.group(3).strip() if hiring_match.group(3) else None
+            if not company or company == "Company":
+                company = detected_company
+            role = detected_role
+            if detected_loc and not location:
+                location = detected_loc
+        elif " at " in role:
+            parts = role.split(" at ", 1)
+            role = parts[0].strip()
+            if not company or company == "Company":
+                company = parts[1].strip()
         elif " | " in role:
             role = role.split(" | ", 1)[0].strip()
-        elif " - " in role and len(role.split(" - ")[0]) > 4:
-            role = role.split(" - ")[0].strip()
+        elif " - " in role:
+            parts = role.rsplit(" - ", 1)
+            if len(parts) == 2 and len(parts[1].strip()) < 35 and (not company or company == "Company"):
+                role = parts[0].strip()
+                company = parts[1].strip()
+            elif len(role.split(" - ")[0]) > 4:
+                role = role.split(" - ")[0].strip()
+
+        company = re.sub(r"\s*(?:—|\|).*$", "", company).strip()
+        location = re.sub(r"\s*\|.*$", "", location).strip()
 
         source_type = "LinkedIn" if "linkedin.com" in scraped.source_url.lower() else "Other ATS"
-        # Keep the exact link received from the alert as provenance. The
-        # scraper's canonical URL is the final public destination after HTTP
-        # or browser redirects (for example, an Ashby application page).
-        source_url = (alert_hint.raw_url if alert_hint and alert_hint.raw_url else scraped.source_url)
-        application_url = scraped.canonical_url or source_url
+        source_url = _public_job_url(
+            (alert_hint.canonical_url or alert_hint.raw_url) if alert_hint else scraped.source_url
+        )
+        application_url = _public_job_url(scraped.canonical_url or source_url)
         source_job_id = alert_hint.job_id if alert_hint else None
         if not source_job_id:
             m = re.search(r"/jobs/view/(\d+)", source_url or scraped.canonical_url)
@@ -101,17 +151,15 @@ class JobPostingExtractor:
         # Extract structured lists
         responsibilities, requirements, preferred_skills = self._extract_sections(source_text)
 
-        # Ensure we have non-empty lists
+        # Missing evidence remains missing; discovery is not a completed extraction.
+        missing_fields = [name for name, value in (("company", company), ("role", role)) if not value]
         if not responsibilities and not requirements:
-            responsibilities = [
-                f"Design and implement software solutions for {company}.",
-                "Collaborate with cross-functional engineering teams.",
-                "Participate in code reviews and architecture design.",
-            ]
-            requirements = [
-                f"Demonstrated engineering experience with {', '.join(technologies[:3]) if technologies else 'core systems'}.",
-                "Strong problem-solving and communication skills.",
-            ]
+            missing_fields.extend(("responsibilities", "requirements"))
+        status = "partial" if missing_fields else "complete"
+        warnings = []
+        if not scraped.is_success:
+            status = "blocked"
+            warnings.append("Public posting retrieval failed or returned insufficient content")
 
         # Construct field-level evidence dictionary
         field_evidence = self._generate_field_evidence(
@@ -135,15 +183,15 @@ class JobPostingExtractor:
 
         job_posting = NormalizedJobPosting(
             schema_version=2,
-            extraction_status="complete",
+            extraction_status=status,
             source=source_type,
             source_url=source_url,
             canonical_url=application_url,
             application_url=application_url,
             source_job_id=source_job_id,
-            company=company,
-            role=role,
-            location=location,
+            company=company or None,
+            role=role or None,
+            location=location or None,
             work_model=work_model,
             employment_type=employment_type,
             seniority=seniority,
@@ -160,8 +208,8 @@ class JobPostingExtractor:
             source_document=source_doc_path,
             source_sha256=source_sha256,
             field_evidence=field_evidence,
-            missing_fields=[],
-            warnings=[],
+            missing_fields=missing_fields,
+            warnings=warnings,
             extracted_at=extracted_at,
         )
 
@@ -180,8 +228,10 @@ class JobPostingExtractor:
             lines.append(f"**Company:** {company}")
         if location:
             lines.append(f"**Location:** {location}")
-        source_url = alert_hint.raw_url if alert_hint and alert_hint.raw_url else scraped.source_url
-        application_url = scraped.canonical_url or source_url
+        source_url = _public_job_url(
+            (alert_hint.canonical_url or alert_hint.raw_url) if alert_hint else scraped.source_url
+        )
+        application_url = _public_job_url(scraped.canonical_url or source_url)
         if source_url:
             lines.append(f"**Source URL:** {source_url}")
         if application_url:
@@ -192,8 +242,6 @@ class JobPostingExtractor:
             lines.append(scraped.visible_text.strip())
         elif alert_hint and alert_hint.snippet:
             lines.append(alert_hint.snippet)
-        else:
-            lines.append("Job posting description extracted from source.")
 
         return "\n".join(lines).strip() + "\n"
 
@@ -220,7 +268,7 @@ class JobPostingExtractor:
             for pat in patterns:
                 if re.search(pat, text, re.I):
                     return emp_type
-        return "Full-time"
+        return None
 
     def _detect_technologies(self, text: str) -> list[str]:
         found: list[str] = []
@@ -421,7 +469,7 @@ class JobPostingExtractor:
                 for line in source_text.splitlines():
                     if target.lower() in line.lower() and len(line.strip()) > 3:
                         return [line.strip()]
-            return [default_quote]
+            return []
 
         # Scalar fields
         if company:
@@ -460,4 +508,21 @@ class JobPostingExtractor:
         for idx, tech in enumerate(technologies or []):
             evidence[f"technologies.{idx}"] = find_best_quote(tech, tech)
 
-        return evidence
+        # Normalized labels may differ from the literal source wording.
+        for field, value, patterns in (
+            ("work_model", work_model, WORK_MODEL_PATTERNS),
+            ("employment_type", employment_type, EMPLOYMENT_TYPE_PATTERNS),
+            ("seniority", seniority, SENIORITY_PATTERNS),
+        ):
+            if value and not evidence.get(field):
+                for line in source_text.splitlines():
+                    if any(re.search(pattern, line, re.I) for pattern in patterns.get(value, [])):
+                        evidence[field] = [line.strip()]
+                        break
+        if language and not evidence.get("language"):
+            # This is the posting's language, supported by its actual text.
+            excerpt = next((line.strip() for line in source_text.splitlines()
+                            if len(line.strip()) > 20 and not line.startswith("**")), None)
+            if excerpt:
+                evidence["language"] = [excerpt]
+        return {key: quotes for key, quotes in evidence.items() if quotes}

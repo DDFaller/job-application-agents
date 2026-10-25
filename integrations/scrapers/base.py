@@ -31,19 +31,13 @@ DEFAULT_HTTP_HEADERS = {
 
 
 BOT_BLOCK_INDICATORS = [
-    "cloudflare",
     "cf-browser-verification",
-    "turnstile",
-    "datadome",
-    "perimeterx",
     "px-captcha",
-    "arkose",
     "access denied",
     "error 403",
     "error 999",
     "please verify you are a human",
     "unusual traffic from your computer",
-    "enable javascript to continue",
     "security check to continue",
     "bot detected",
     "rate limit exceeded",
@@ -54,10 +48,7 @@ BOT_BLOCK_INDICATORS = [
 
 def is_bot_blocked(status_code: int, html_body: str) -> bool:
     """Detect if a webpage blocked direct access via HTTP status or anti-bot challenge DOM."""
-    if status_code in (403, 429, 999, 503):
-        return True
-
-    if not html_body or len(html_body.strip()) < 200:
+    if status_code in (401, 403, 429, 999):
         return True
 
     lower_body = html_body.lower()

@@ -38,6 +38,9 @@ def main() -> int:
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent.parent
+    sys.path.insert(0, str(repo_root))
+    from job_application_agents.retirement import require_active
+    require_active(args.project)
 
     print("=== Google Cloud Run Deployment Configuration ===")
     print(f"Project ID:      {args.project}")

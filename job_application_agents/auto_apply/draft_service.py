@@ -51,7 +51,13 @@ class DraftService:
             val: Any = ""
             source = FieldSource.PROFILE
 
-            if ("name" in label_lower or "name" in name_lower) and "company" not in label_lower and "referrer" not in label_lower:
+            answer_key = next((key for key in (node.id, node.name, node.label)
+                               if key and key in candidate.custom_answers), None)
+            if answer_key is not None:
+                val = candidate.custom_answers[answer_key]
+                source = FieldSource.USER
+
+            elif ("name" in label_lower or "name" in name_lower) and "company" not in label_lower and "referrer" not in label_lower:
                 if "first" in label_lower or "first" in name_lower:
                     val = candidate.first_name
                 elif "last" in label_lower or "last" in name_lower:
@@ -84,29 +90,11 @@ class DraftService:
                 val = str(resume_path.name)
                 source = FieldSource.RESUME
 
-            elif "authorized to work" in label_lower or "legal" in label_lower and "authorization" in label_lower:
-                val = "Yes"
-                source = FieldSource.PROFILE
-
-            elif "sponsorship" in label_lower or "visa" in label_lower:
-                val = "Yes" if candidate.requires_sponsorship else "No"
-                source = FieldSource.PROFILE
-
-            elif "hybrid" in label_lower or "office" in label_lower or "onsite" in label_lower:
-                val = "Yes"
-                source = FieldSource.PROFILE
-
             else:
-                # Custom question or open-ended textarea
-                if node.id in candidate.custom_answers:
-                    val = candidate.custom_answers[node.id]
-                    source = FieldSource.USER
-                elif node.name in candidate.custom_answers:
-                    val = candidate.custom_answers[node.name]
-                    source = FieldSource.USER
-                else:
-                    val = ""
-                    source = FieldSource.AI
+                # Eligibility and attendance are specific to the actual question.
+                # A generic profile flag must not answer them for another role.
+                val = ""
+                source = FieldSource.AI
 
             fields.append(
                 ApplicationField(

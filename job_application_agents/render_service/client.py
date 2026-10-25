@@ -53,6 +53,8 @@ class RenderServiceClient:
         self.artifacts = artifacts
 
     def preflight(self) -> None:
+        from job_application_agents.retirement import require_active
+        require_active(getattr(self.repository, "project_id", None))
         if not self.repository.worker_ready(90):
             raise RuntimeError("no compatible XeLaTeX worker has reported ready in the last 90 seconds")
 
@@ -68,6 +70,8 @@ class RenderServiceClient:
         user_id: str | None = None,
         wait_seconds: int = 330,
     ) -> dict:
+        from job_application_agents.retirement import require_active
+        require_active(getattr(self.repository, "project_id", None))
         input_artifact = self.artifacts.put_directory(source_directory)
         request = RenderRequest(
             request_id=str(uuid4()), input_artifact=input_artifact,
@@ -149,6 +153,9 @@ class RenderServiceClient:
         DIRECT_UNAVAILABLE when the worker is unreachable, WORKER_BUSY when
         saturated, or the engine's own error code on compile failure.
         """
+        from job_application_agents.retirement import require_active
+        # A local direct worker remains usable even with a legacy cloud project configured.
+        require_active("local-direct", url=base_url)
         request = RenderRequest(
             request_id=request_id or str(uuid4()),
             input_artifact=self.artifacts.put_directory(source_directory),
@@ -182,6 +189,50 @@ class RenderServiceClient:
         if not isinstance(result, dict):
             raise RenderJobFailure("DIRECT_UNAVAILABLE", "direct render worker returned malformed response")
         return self._collect_result(output_artifact, result, request.request_id, destination)
+
+    def compile_with_fallback(
+        self,
+        base_url: str | None,
+        source_directory: Path,
+        documents: tuple[CompileDocument, ...],
+        destination: Path,
+        *,
+        idempotency_key: str,
+        required_packages: tuple[str, ...] = (),
+        required_fonts: tuple[str, ...] = (),
+        timeout_seconds: int = 300,
+        user_id: str | None = None,
+    ) -> tuple[dict, str]:
+        """Compile via direct HTTPS first, falling back to the Firestore queue.
+
+        Returns (result, path) where path is "direct" or "queue". Raises the
+        queue error if both paths fail.
+        """
+        if base_url and direct_worker_ready(base_url):
+            try:
+                return (
+                    self.compile_direct(
+                        base_url, source_directory, documents, destination,
+                        required_packages=required_packages,
+                        required_fonts=required_fonts,
+                        timeout_seconds=timeout_seconds, user_id=user_id,
+                    ),
+                    "direct",
+                )
+            except RenderJobFailure as exc:
+                if exc.code not in {"DIRECT_UNAVAILABLE", "WORKER_BUSY"}:
+                    raise
+        if self.repository is None:
+            raise RenderJobFailure("DIRECT_UNAVAILABLE", "no direct worker and no queue repository")
+        return (
+            self.compile_and_wait(
+                source_directory, documents, destination,
+                idempotency_key=idempotency_key,
+                required_packages=required_packages,
+                required_fonts=required_fonts, user_id=user_id,
+            ),
+            "queue",
+        )
 
 
 def deterministic_key(prefix: str, *paths: Path, options: dict | None = None) -> str:

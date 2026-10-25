@@ -60,7 +60,7 @@ def rank_jobs(
         if status in {"expired", "rejected", "withdrawn", "applied", "blocked", "partial"}:
             continue
         score = JobMatchScorer.score_job(payload, candidate=candidate)
-        if score.total_score < min_score:
+        if score.total_score is not None and score.total_score < min_score:
             continue
         ranked.append(
             {
@@ -77,7 +77,7 @@ def rank_jobs(
                 "triage_only": True,
             }
         )
-    ranked.sort(key=lambda row: (-int(row["score"]), str(row.get("company") or "").lower(), str(row.get("role") or "").lower()))
+    ranked.sort(key=lambda row: (-(row["score"] if row["score"] is not None else -1), str(row.get("company") or "").lower(), str(row.get("role") or "").lower()))
     return ranked[:top]
 
 

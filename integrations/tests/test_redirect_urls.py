@@ -47,10 +47,11 @@ class TestRedirectURLPreservation(unittest.TestCase):
             posting, source_text = JobPostingExtractor().extract(
                 scraped, alert_hint=alert, output_dir=Path(tmp)
             )
-            self.assertEqual(posting.source_url, linkedin_url)
+            self.assertEqual(posting.source_url, alert.canonical_url)
             self.assertEqual(posting.canonical_url, ashby_url)
             self.assertEqual(posting.application_url, ashby_url)
-            self.assertIn(f"**Source URL:** {linkedin_url}", source_text)
+            self.assertIn(f"**Source URL:** {alert.canonical_url}", source_text)
+            self.assertNotIn("tracking-id", source_text)
             self.assertIn(f"**Application URL:** {ashby_url}", source_text)
 
             job_path = Path(tmp) / "job.json"

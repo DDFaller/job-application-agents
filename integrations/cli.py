@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 from pathlib import Path
 import sys
 from typing import Any
@@ -103,6 +104,48 @@ def cmd_authorize_gmail(args: argparse.Namespace) -> int:
     return 0
 
 
+def _gmail_api_client(args: argparse.Namespace) -> GmailApiClient:
+    cfg = IntegrationsConfig(args.config)
+    email_cfg = cfg.get_email_config()
+    email_cfg.auth_mode = "gmail_api"
+    client = create_email_client(email_cfg)
+    primary = getattr(client, "primary", client)
+    if not isinstance(primary, GmailApiClient):
+        raise GmailApiConfigurationError("Gmail API transport is unavailable")
+    return primary
+
+
+def cmd_watch(args: argparse.Namespace) -> int:
+    """Subscribe a Pub/Sub topic to mailbox changes (renew before 7-day expiry)."""
+    topic = args.topic or os.environ.get("GMAIL_PUSH_TOPIC", "")
+    if not topic:
+        print("❌ Set --topic or GMAIL_PUSH_TOPIC to the Pub/Sub topic name", file=sys.stderr)
+        return 1
+    try:
+        client = _gmail_api_client(args)
+        watch = client.start_watch(topic)
+    except (GmailApiConfigurationError, ValueError) as exc:
+        print(f"❌ Gmail watch failed: {exc}", file=sys.stderr)
+        return 1
+    print("✅ Gmail watch active")
+    print(f"• Topic: {topic}")
+    print(f"• historyId: {watch['history_id']}")
+    print(f"• Expires: {watch['expiration']} (renew with this command before then)")
+    return 0
+
+
+def cmd_unwatch(args: argparse.Namespace) -> int:
+    """Remove the mailbox watch."""
+    try:
+        client = _gmail_api_client(args)
+        stopped = client.stop_watch()
+    except GmailApiConfigurationError as exc:
+        print(f"❌ Gmail unwatch failed: {exc}", file=sys.stderr)
+        return 1
+    print("✅ Gmail watch removed" if stopped else "⚠️ Gmail watch stop failed")
+    return 0 if stopped else 1
+
+
 def cmd_ingest(args: argparse.Namespace) -> int:
     """Run the job alert ingestion pipeline."""
     cfg = IntegrationsConfig(args.config)
@@ -160,6 +203,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     print(f"• High Matches (≥80):  {result.total_high_matches}")
     print(f"• Medium Matches (60-79): {result.total_medium_matches}")
     print(f"• Low Matches (<60):   {result.total_low_matches}")
+    print(f"• Fit not assessed:    {result.total_unassessed}")
     print(f"• Duration:           {result.duration_seconds:.2f}s")
     if args.show_filter_summary:
         print(f"• Provider filter summary: {json.dumps(result.filter_summary, sort_keys=True)}")
@@ -167,9 +211,10 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     if result.jobs:
         print("\n📋 INGESTED JOBS:")
         for idx, job in enumerate(result.jobs, 1):
-            badge = "🟢" if job.match_score >= 80 else ("🟡" if job.match_score >= 60 else "⚪")
+            badge = "⚪" if job.match_score is None else ("🟢" if job.match_score >= 80 else ("🟡" if job.match_score >= 60 else "⚪"))
+            score_label = "Not assessed" if job.match_score is None else f"{job.match_score}/100"
             staged_str = f" ➔ Staged at: {job.staging_dir}" if job.staging_dir else f" (Status: {job.status})"
-            print(f"  {idx}. {badge} [{job.match_score}/100] {job.job_data.role} @ {job.job_data.company}{staged_str}")
+            print(f"  {idx}. {badge} [{score_label}] {job.job_data.role} @ {job.job_data.company}{staged_str}")
 
     if result.errors:
         print("\n⚠️ WARNINGS / ERRORS:")
@@ -394,6 +439,12 @@ def main(argv: list[str] | None = None) -> int:
     processed_p.add_argument("--limit", type=int, default=10, help="Number of recent entries to show")
     processed_p.add_argument("--config", type=Path, help="Path to custom config JSON")
 
+    watch_p = subparsers.add_parser("watch", help="Subscribe a Pub/Sub topic to mailbox changes")
+    watch_p.add_argument("--topic", help="Pub/Sub topic (or GMAIL_PUSH_TOPIC env)")
+    watch_p.add_argument("--config", type=Path, help="Path to custom config JSON")
+    unwatch_p = subparsers.add_parser("unwatch", help="Remove the mailbox watch")
+    unwatch_p.add_argument("--config", type=Path, help="Path to custom config JSON")
+
     args = parser.parse_args(argv)
 
     if not args.command:
@@ -416,6 +467,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_validate_settings(args)
     elif args.command == "show-processed":
         return cmd_show_processed(args)
+    elif args.command == "watch":
+        return cmd_watch(args)
+    elif args.command == "unwatch":
+        return cmd_unwatch(args)
 
     return 0
 

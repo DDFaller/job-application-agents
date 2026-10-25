@@ -339,20 +339,26 @@ class NotionClient:
         })
         if payload.match_score is not None:
             bd = payload.match_breakdown or {}
+            weights = bd.get('weights') or {'skills_score': 30, 'experience_score': 25,
+                'role_score': 20, 'location_score': 15, 'company_fit_score': 5, 'compensation_score': 5}
             score_summary = (
                 f"🎯 Overall Match Score: {payload.match_score} / 100\n"
-                f"• 🛠️ Skills Match: {bd.get('skills_score', 'N/A')} / 30\n"
-                f"• ⏳ Experience Match: {bd.get('experience_score', 'N/A')} / 25\n"
-                f"• 💼 Role Match: {bd.get('role_score', 'N/A')} / 20\n"
-                f"• 📍 Location Match: {bd.get('location_score', 'N/A')} / 15\n"
-                f"• 🏢 Company Fit: {bd.get('company_fit_score', 'N/A')} / 5\n"
-                f"• 💰 Compensation: {bd.get('compensation_score', 'N/A')} / 5"
+                + '\n'.join(f"• {label}: {bd.get(key, 'N/A')} / {weight}" for key, label in (
+                    ('skills_score', 'Skills'), ('experience_score', 'Experience'), ('role_score', 'Role'),
+                    ('location_score', 'Location preference'), ('company_fit_score', 'Company'), ('compensation_score', 'Compensation')
+                ) if (weight := weights.get(key, 0)))
             )
+            if bd.get('rubric_version') == 'evidence-fit-v1':
+                score_summary = (f"Supported fit: {payload.match_score}/100\n"
+                    f"Evidence coverage: {bd.get('evidence_coverage', 'Unknown')}%\n"
+                    f"Unresolved evidence range: {payload.match_score}–{bd.get('score_upper_bound', payload.match_score)}\n"
+                    + '\n'.join(f"• {c['label']}: {c['status']} — {c['rationale']}" for c in bd.get('gaps', [])))
             children.append({
                 "object": "block",
                 "type": "callout",
                 "callout": {
-                    "rich_text": [{"type": "text", "text": {"content": score_summary}}],
+                    "rich_text": [{"type": "text", "text": {"content": score_summary[i:i + 1900]}}
+                                  for i in range(0, len(score_summary), 1900)],
                     "icon": {"type": "emoji", "emoji": "🎯"},
                 },
             })

@@ -299,5 +299,66 @@ class DirectClientUnitTests(unittest.TestCase):
             self.assertFalse(direct_worker_ready("http://worker:8000"))
 
 
+class CompileWithFallbackTests(unittest.TestCase):
+    """Direct-first with queue fallback (no tools required)."""
+
+    def _client(self):
+        store = mock.Mock()
+        repo = mock.Mock()
+        return RenderServiceClient(repo, store)
+
+    def test_direct_path_wins_when_ready(self) -> None:
+        client = self._client()
+        with mock.patch.object(client_module, "direct_worker_ready", return_value=True), \
+                mock.patch.object(client, "compile_direct", return_value={"ok": True}) as direct, \
+                mock.patch.object(client, "compile_and_wait") as queued:
+            result, path = client.compile_with_fallback(
+                "http://worker:8000", Path("/src"), (), Path("/dst"),
+                idempotency_key="k",
+            )
+        self.assertEqual((result, path), ({"ok": True}, "direct"))
+        direct.assert_called_once()
+        queued.assert_not_called()
+
+    def test_queue_fallback_on_unreachable_direct(self) -> None:
+        client = self._client()
+        with mock.patch.object(client_module, "direct_worker_ready", return_value=True), \
+                mock.patch.object(
+                    client, "compile_direct",
+                    side_effect=RenderJobFailure("DIRECT_UNAVAILABLE", "down"),
+                ), \
+                mock.patch.object(client, "compile_and_wait", return_value={"ok": True}) as queued:
+            result, path = client.compile_with_fallback(
+                "http://worker:8000", Path("/src"), (), Path("/dst"),
+                idempotency_key="k",
+            )
+        self.assertEqual((result, path), ({"ok": True}, "queue"))
+        queued.assert_called_once()
+
+    def test_queue_used_when_no_direct_url(self) -> None:
+        client = self._client()
+        with mock.patch.object(client, "compile_and_wait", return_value={"ok": True}) as queued:
+            _, path = client.compile_with_fallback(
+                None, Path("/src"), (), Path("/dst"), idempotency_key="k",
+            )
+        self.assertEqual(path, "queue")
+        queued.assert_called_once()
+
+    def test_compile_errors_are_not_swallowed(self) -> None:
+        client = self._client()
+        with mock.patch.object(client_module, "direct_worker_ready", return_value=True), \
+                mock.patch.object(
+                    client, "compile_direct",
+                    side_effect=RenderJobFailure("COMPILE_ERROR", "bad tex"),
+                ), \
+                mock.patch.object(client, "compile_and_wait") as queued:
+            with self.assertRaises(RenderJobFailure):
+                client.compile_with_fallback(
+                    "http://worker:8000", Path("/src"), (), Path("/dst"),
+                    idempotency_key="k",
+                )
+        queued.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

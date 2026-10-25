@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+import json
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from job_application_agents.plugins.notion.client import NotionClient
 from job_application_agents.plugins.notion.firestore import FirestoreNotionJobRepository
@@ -130,6 +132,56 @@ def handle_notion_webhook(
     )
     notion_repository.record_webhook_event(event_id, {"type": event_type, "page_id": page_id})
     return result
+
+
+def parse_gmail_push_envelope(envelope: dict[str, Any]) -> dict[str, str]:
+    """Decode a Pub/Sub push envelope carrying a Gmail watch notification."""
+    try:
+        message = envelope.get("message") or {}
+        data = base64.b64decode(str(message.get("data") or "")).decode("utf-8")
+        payload = json.loads(data)
+        history_id = str(payload.get("historyId") or "")
+        email_address = str(payload.get("emailAddress") or "")
+    except (ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"malformed Gmail push envelope: {exc}") from exc
+    if not history_id:
+        raise ValueError("Gmail push envelope carries no historyId")
+    return {
+        "history_id": history_id,
+        "email_address": email_address,
+        "delivery_id": str(message.get("messageId") or ""),
+    }
+
+
+def handle_gmail_push(
+    *,
+    envelope: dict[str, Any],
+    verification_token: str | None,
+    expected_token: str,
+    gmail_client: Any,
+    run_ingestion: Callable[[list[str]], Any],
+) -> dict[str, Any]:
+    """Verify a Gmail push delivery and ingest only the notified messages.
+
+    At-least-once redelivery is safe: already-processed messages are skipped
+    by the ingestion ledger.
+    """
+    if not expected_token or verification_token != expected_token:
+        raise PermissionError("invalid Gmail push token")
+    parsed = parse_gmail_push_envelope(envelope)
+    gmail_ids = gmail_client.list_history_ids(parsed["history_id"])
+    if not gmail_ids:
+        return {"status": "NOOP", "reason": "no_new_messages", **parsed}
+    result = run_ingestion(gmail_ids)
+    return {
+        "status": "INGESTED",
+        "gmail_ids": gmail_ids,
+        "total_jobs_staged": getattr(result, "total_jobs_staged", 0),
+        "total_emails_skipped_already_checked": getattr(
+            result, "total_emails_skipped_already_checked", 0
+        ),
+        **parsed,
+    }
 
 
 def reconcile_notion(

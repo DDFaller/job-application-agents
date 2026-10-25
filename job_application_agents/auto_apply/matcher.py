@@ -4,24 +4,37 @@ from dataclasses import asdict, dataclass, field
 import json
 from pathlib import Path
 import re
+import math
 from typing import Any
 
 
 @dataclass
 class MatchBreakdown:
-    skills_score: int  # 0–30
-    experience_score: int  # 0–25
+    skills_score: int  # 0–35
+    experience_score: int  # 0–30
     role_score: int  # 0–20
     location_score: int  # 0–15
     company_fit_score: int  # 0–5
     compensation_score: int  # 0–5
-    total_score: int = 0  # 0–100
+    total_score: int | None = 0  # None means not assessed
     rating: str = "Medium Match"  # High Match (>=80), Medium Match (60-79), Low Match (<60)
     matched_skills: list[str] = field(default_factory=list)
     missing_skills: list[str] = field(default_factory=list)
     analysis: str = ""
+    assessed: bool = True
+    evidence_coverage: int = 0
+    score_upper_bound: int = 100
+    rubric_version: str = "structured-triage-v2"
+    weights: dict[str, int] = field(default_factory=lambda: {
+        "skills_score": 35, "experience_score": 30, "role_score": 20,
+        "location_score": 15, "company_fit_score": 0, "compensation_score": 0,
+    })
 
     def __post_init__(self) -> None:
+        if not self.assessed:
+            self.total_score = None
+            self.rating = "Not assessed"
+            return
         self.total_score = (
             self.skills_score
             + self.experience_score
@@ -52,67 +65,17 @@ class MatchBreakdown:
             matched_skills=list(data.get("matched_skills", [])),
             missing_skills=list(data.get("missing_skills", [])),
             analysis=str(data.get("analysis", "")),
+            assessed=data.get("assessed", True),
+            evidence_coverage=int(data.get("evidence_coverage", 0)),
+            score_upper_bound=int(data.get("score_upper_bound", 100)),
+            rubric_version=str(data.get("rubric_version", "legacy")),
+            weights=dict(data.get("weights") or {"skills_score": 30, "experience_score": 25,
+                "role_score": 20, "location_score": 15, "company_fit_score": 5, "compensation_score": 5}),
         )
 
 
-# Conservative sample facts used only when a caller has not supplied a
-# candidate profile. Real workflows should always pass the user's evidence.
-DEFAULT_CANDIDATE_FACTS = {
-    "name": "Candidate",
-    "years_experience": 4.5,
-    "seniority": ["Mid", "Senior"],
-    "locations": ["Paris", "France", "EU", "Remote", "Hybrid"],
-    "authorization": "France / European Union (No visa sponsorship required)",
-    "skills": [
-        "python",
-        "typescript",
-        "node.js",
-        "react",
-        "fastapi",
-        "flask",
-        "django",
-        "sql",
-        "postgresql",
-        "redis",
-        "bigquery",
-        "kafka",
-        "docker",
-        "kubernetes",
-        "terraform",
-        "argocd",
-        "helm",
-        "gcp",
-        "aws",
-        "github actions",
-        "ci/cd",
-        "datadog",
-        "opentelemetry",
-        "langchain",
-        "langsmith",
-        "langgraph",
-        "anthropic",
-        "google gemini",
-        "openai",
-        "openrouter",
-        "llm",
-        "rag",
-        "latex",
-        "playwright",
-    ],
-    "target_roles": [
-        "software engineer",
-        "platform engineer",
-        "ai platform engineer",
-        "backend engineer",
-        "full stack engineer",
-        "machine learning engineer",
-        "data engineer",
-    ],
-}
-
-
 class JobMatchScorer:
-    """Evaluates job openings against candidate facts using a strict 100-point rubric."""
+    """Conservative shortlist triage from supplied facts; never submission authority."""
 
     @classmethod
     def score_job(
@@ -120,109 +83,59 @@ class JobMatchScorer:
         job_data: dict[str, Any],
         candidate: dict[str, Any] | None = None,
     ) -> MatchBreakdown:
-        cand = candidate or DEFAULT_CANDIDATE_FACTS
-        cand_skills = set(s.lower() for s in cand.get("skills", []))
+        if not candidate:
+            return MatchBreakdown(0, 0, 0, 0, 0, 0, assessed=False,
+                analysis="Not assessed: supply verified candidate facts. No sample profile was used.")
+        cand = candidate
+        cand_skills = {cls._skill(s) for s in cand.get("skills", []) if isinstance(s, str) and s.strip()}
+        requirements = job_data.get("requirements") or []
+        technologies = job_data.get("technologies") or []
+        target = list(dict.fromkeys(cls._skill(t) for t in
+            technologies + cls._extract_tech_keywords(requirements) if isinstance(t, str) and t.strip()))
+        matched = [s for s in target if s in cand_skills]
+        missing = [s for s in target if s not in cand_skills]
+        skills_known = bool(target) and bool(cand.get("skills"))
+        skills_score = math.floor(35 * len(matched) / len(target)) if skills_known else 0
 
-        # Normalize job data
-        job_technologies = [t.lower() for t in job_data.get("technologies", [])]
-        job_requirements = [r.lower() for r in job_data.get("requirements", [])]
-        job_preferred = [p.lower() for p in job_data.get("preferred_skills", [])]
-        role_title = str(job_data.get("role", "")).lower()
-        location_str = str(job_data.get("location", "")).lower()
-        work_model = str(job_data.get("work_model", "")).lower()
-        company_str = str(job_data.get("company", "")).lower()
-        compensation_str = str(job_data.get("compensation", "")).lower()
+        req_years = cls._extract_years_required(requirements)
+        years = cand.get("years_experience")
+        years_known = type(years) in {int, float} and math.isfinite(years) and years >= 0
+        experience_known = req_years is not None and years_known
+        experience_score = math.floor(30 * min(1, years / req_years)) if experience_known and req_years > 0 else (30 if experience_known else 0)
 
-        # 1. SKILLS MATCH (0–30)
-        # Combine required technologies and keyword mentions
-        matched_skills: list[str] = []
-        missing_skills: list[str] = []
+        role = str(job_data.get("role") or job_data.get("job_title") or "").lower()
+        target_roles = [str(r).lower().strip() for r in cand.get("target_roles", []) if str(r).strip()]
+        role_known = bool(role and target_roles)
+        role_score = 20 if role_known and any(cls._phrase(r, role) for r in target_roles) else 0
 
-        all_target_tech = list(dict.fromkeys(job_technologies + cls._extract_tech_keywords(job_requirements)))
-        if not all_target_tech:
-            # Fallback if technologies array is empty
-            skills_score = 22
-            matched_skills = ["Python", "Docker", "Kubernetes", "PostgreSQL", "CI/CD"]
-        else:
-            for tech in all_target_tech:
-                clean_tech = tech.strip()
-                if any(cs in clean_tech or clean_tech in cs for cs in cand_skills):
-                    matched_skills.append(clean_tech.capitalize())
-                else:
-                    missing_skills.append(clean_tech.capitalize())
-
-            match_ratio = len(matched_skills) / max(len(all_target_tech), 1)
-            skills_score = int(round(match_ratio * 30))
-            skills_score = max(0, min(30, skills_score))
-
-        # 2. EXPERIENCE MATCH (0–25)
-        # Evaluate years of experience requested vs candidate (~4.5 years)
-        req_years = cls._extract_years_required(job_requirements)
-        cand_years = float(cand.get("years_experience", 4.5))
-
-        if req_years is None or req_years <= 3:
-            experience_score = 25
-        elif req_years <= 5:
-            experience_score = 22 if cand_years >= req_years else 18
-        elif req_years <= 7:
-            experience_score = 15
-        else:
-            experience_score = 10
-
-        # 3. ROLE MATCH (0–20)
-        target_roles = [r.lower() for r in cand.get("target_roles", [])]
-        role_score = 10
-        for tr in target_roles:
-            if tr in role_title or any(w in role_title for w in tr.split()):
-                role_score = 20
-                break
-            elif "engineer" in role_title or "developer" in role_title:
-                role_score = 16
-
-        # 4. LOCATION MATCH (0–15)
-        # Paris, France, EU, or Remote/Hybrid
-        location_score = 10
-        if any(loc.lower() in location_str for loc in ["paris", "france", "remote", "hybrid", "eu", "europe"]):
-            location_score = 15
-        elif not location_str or "unspecified" in location_str:
-            location_score = 12
-        elif any(loc.lower() in location_str for loc in ["us", "usa", "san francisco", "new york", "london", "uk"]):
-            location_score = 5
-
-        # 5. COMPANY FIT (0–5)
-        company_fit_score = 4
-        if company_str and company_str not in ("unspecified", "confidential"):
-            company_fit_score = 5
-
-        # 6. COMPENSATION (0–5)
-        compensation_score = 3
-        if compensation_str and compensation_str not in ("null", "unspecified", "none", ""):
-            compensation_score = 5
-
-        # Build analysis explanation
-        analysis_lines = [
-            f"### 🎯 Job Match Breakdown: **{skills_score + experience_score + role_score + location_score + company_fit_score + compensation_score}/100**",
-            "",
-            f"- **🛠️ Skills Match ({skills_score}/30)**: Matched key technologies: {', '.join(matched_skills[:8]) or 'None'}.",
-            f"- **⏳ Experience Match ({experience_score}/25)**: Candidate has {cand_years} years relevant experience vs {req_years or 'unspecified'} years requested.",
-            f"- **💼 Role Match ({role_score}/20)**: Strong alignment with candidate's core profile ({role_title.title()}).",
-            f"- **📍 Location Match ({location_score}/15)**: Location ({location_str.title() or 'Remote/Hybrid'}) is authorized in EU/France without sponsorship.",
-            f"- **🏢 Company Fit ({company_fit_score}/5)**: Domain and engineering culture fit.",
-            f"- **💰 Compensation ({compensation_score}/5)**: {'Transparent compensation disclosed.' if compensation_score == 5 else 'Market benchmark alignment.'}",
-        ]
-        analysis_text = "\n".join(analysis_lines)
-
+        location = str(job_data.get("location") or "").lower()
+        locations = [str(loc).lower().strip() for loc in cand.get("locations", []) if str(loc).strip()]
+        location_known = bool(location and locations)
+        location_score = 15 if location_known and any(cls._phrase(loc, location) for loc in locations) else 0
+        # Company names and disclosed salaries are not evidence of personal fit.
+        coverage = 35 * skills_known + 30 * experience_known + 20 * role_known + 15 * location_known
+        score = skills_score + experience_score + role_score + location_score
         return MatchBreakdown(
-            skills_score=skills_score,
-            experience_score=experience_score,
-            role_score=role_score,
-            location_score=location_score,
-            company_fit_score=company_fit_score,
-            compensation_score=compensation_score,
-            matched_skills=matched_skills,
-            missing_skills=missing_skills,
-            analysis=analysis_text,
+            skills_score, experience_score, role_score, location_score, 0, 0,
+            matched_skills=[s.capitalize() for s in matched],
+            missing_skills=[s.capitalize() for s in missing],
+            evidence_coverage=coverage, score_upper_bound=min(100, score + 100 - coverage),
+            analysis=(f"Structured shortlist triage: {score}/100; evidence coverage {coverage}%. "
+                f"Skills {skills_score}/35; experience {experience_score}/30; role {role_score}/20; "
+                f"location preference {location_score}/15. "
+                "Missing skills mean not documented in supplied facts. Location matching does not "
+                "establish work authorization. Use the evidence-bound fit report for application decisions."),
         )
+
+    @staticmethod
+    def _phrase(needle: str, haystack: str) -> bool:
+        return re.search(r"(?<![a-z0-9])" + re.escape(needle) + r"(?![a-z0-9])", haystack) is not None
+
+    @staticmethod
+    def _skill(value: str) -> str:
+        value = value.lower().strip()
+        return {"nodejs": "node.js", "node js": "node.js", "postgres": "postgresql",
+                "k8s": "kubernetes", "js": "javascript", "ts": "typescript"}.get(value, value)
 
     @staticmethod
     def _extract_tech_keywords(texts: list[str]) -> list[str]:
@@ -234,14 +147,14 @@ class JobMatchScorer:
         found = []
         combined = " ".join(texts).lower()
         for tech in common_tech:
-            if tech in combined:
+            if JobMatchScorer._phrase(tech, combined):
                 found.append(tech)
         return found
 
     @staticmethod
     def _extract_years_required(requirements: list[str]) -> float | None:
         combined = " ".join(requirements).lower()
-        match = re.search(r"(\d+)\+?\s*(?:to\s*(\d+)\s*)?years?", combined)
+        match = re.search(r"(\d+(?:\.\d+)?)\+?\s*(?:(?:to|[-–])\s*\d+(?:\.\d+)?\s*)?(?:years?|ans?|années?)\b", combined)
         if match:
             return float(match.group(1))
         return None

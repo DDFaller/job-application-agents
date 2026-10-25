@@ -1,0 +1,44 @@
+# Cloud Run service for the LaTeX renderer (phase 5).
+# Direct HTTPS compile first, Firestore queue as fallback (client-side).
+# Deploy after pushing the image (see deploy/cloudbuild-latex.yaml):
+#   gcloud run services replace deploy/cloudrun-latex.yaml \
+#     --region=europe-west1 --project=PROJECT_ID
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: latex-worker
+  annotations:
+    run.googleapis.com/ingress: internal-and-cloud-load-balancing
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "3"
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      containerConcurrency: 1
+      timeoutSeconds: 300
+      containers:
+        - image: REGION-docker.pkg.dev/PROJECT_ID/jaa-workers/latex-worker:latest
+          # run_server serves /healthz + /compile and embeds the queue-worker
+          # thread whenever JAA_FIREBASE_PROJECT_ID is set.
+          command: ["python", "-m", "job_application_agents.render_service.server"]
+          ports:
+            - name: http1
+              containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: JAA_FIREBASE_PROJECT_ID
+              value: PROJECT_ID
+            - name: JAA_ARTIFACT_ROOT
+              value: /tmp/artifacts
+          resources:
+            limits:
+              cpu: "2"
+              memory: 2Gi
+  traffic:
+    - percent: 100
+      latestRevision: true

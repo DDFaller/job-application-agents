@@ -174,6 +174,8 @@ class HttpJobScraper(BaseJobScraper):
             title = meta_tags.get("og:title") or meta_tags.get("twitter:title") or ""
         if not company:
             company = meta_tags.get("og:site_name") or meta_tags.get("application-name") or ""
+            if company.lower() in {"linkedin", "indeed", "glassdoor"}:
+                company = ""
         if not location:
             location = meta_tags.get("job:location") or meta_tags.get("place:location:latitude") or ""
 
@@ -182,5 +184,31 @@ class HttpJobScraper(BaseJobScraper):
             m = re.search(r"<title[^>]*>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
             if m:
                 title = m.group(1).strip()
+
+        # 4. Decompose title patterns (e.g. "<Role> at <Company> — <Location> | LinkedIn Jobs")
+        if title:
+            clean_title = re.sub(r"\s*\|\s*LinkedIn\s*Jobs.*$", "", title, flags=re.IGNORECASE).strip()
+            # Pattern A: <Role> at <Company> — <Location>
+            m_at = re.match(r"^(.+?)\s+at\s+(.+?)(?:\s+[—–-]\s+(.+))?$", clean_title, re.IGNORECASE)
+            # Pattern B: <Company> hiring <Role> in <Location>
+            m_hiring = re.match(r"^(.+?)\s+hiring\s+(.+?)(?:\s+in\s+(.+))?$", clean_title, re.IGNORECASE)
+
+            if m_hiring:
+                if not company:
+                    company = m_hiring.group(1).strip()
+                title = m_hiring.group(2).strip()
+                if not location and m_hiring.group(3):
+                    location = m_hiring.group(3).strip()
+            elif m_at:
+                title = m_at.group(1).strip()
+                if not company:
+                    company = m_at.group(2).strip()
+                if not location and m_at.group(3):
+                    location = m_at.group(3).strip()
+            elif " — " in clean_title:
+                parts = clean_title.split(" — ", 1)
+                title = parts[0].strip()
+                if not location and len(parts) > 1:
+                    location = re.sub(r"\s*\|.*$", "", parts[1]).strip()
 
         return title, company, location

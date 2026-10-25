@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .base import BaseFormDriver
+from ..interaction import form_input
 from ..models import CandidateProfile, FormFillResult, SubmissionReceipt
 
 
@@ -25,40 +26,49 @@ class GenericFormDriver(BaseFormDriver):
         letter_pdf: Path | None = None,
         job_data: dict[str, Any] | None = None,
     ) -> FormFillResult:
+        inputs = form_input(page)
         fields_filled: list[str] = []
         resume_uploaded = False
         letter_uploaded = False
 
         # Attempt to find common input fields by type, autocomplete, or placeholder
         # 1. Name
-        name_input = page.locator('input[autocomplete="name"], input[name*="name"], input[placeholder*="Name"]').first
+        name_input = page.locator('input[autocomplete="name"], input[name="name" i], input[name="full_name" i], input[name="fullname" i]').first
         if name_input.count() > 0 and name_input.is_visible():
-            name_input.fill(candidate.full_name)
+            inputs.text("name_input", name_input, candidate.full_name)
             fields_filled.append("name")
+        for field, selector, value in (
+            ("first_name", 'input[autocomplete="given-name"], input[name="first_name" i], input[name="firstname" i], input[name="prenom" i]', candidate.first_name),
+            ("last_name", 'input[autocomplete="family-name"], input[name="last_name" i], input[name="lastname" i], input[name="nom" i]', candidate.last_name),
+        ):
+            locator = page.locator(selector).first
+            if locator.count() and locator.is_visible():
+                inputs.text(field, locator, value)
+                fields_filled.append(field)
 
         # 2. Email
         email_input = page.locator('input[type="email"], input[name*="email"], input[placeholder*="email" i]').first
         if email_input.count() > 0 and email_input.is_visible():
-            email_input.fill(candidate.email)
+            inputs.text("email_input", email_input, candidate.email)
             fields_filled.append("email")
 
         # 3. Phone
         phone_input = page.locator('input[type="tel"], input[name*="phone"], input[placeholder*="phone" i]').first
         if phone_input.count() > 0 and phone_input.is_visible():
-            phone_input.fill(candidate.phone)
+            inputs.text("phone_input", phone_input, candidate.phone)
             fields_filled.append("phone")
 
         # 4. Resume File Upload
         file_input = page.locator('input[type="file"]').first
         if file_input.count() > 0 and resume_pdf.is_file():
-            file_input.set_input_files(str(resume_pdf.resolve()))
+            inputs.upload("file_input", file_input, resume_pdf)
             resume_uploaded = True
             fields_filled.append("resume_file")
 
         # 5. LinkedIn / Social
         linkedin_input = page.locator('input[name*="linkedin" i], input[placeholder*="linkedin" i]').first
         if linkedin_input.count() > 0 and linkedin_input.is_visible() and candidate.linkedin_url:
-            linkedin_input.fill(candidate.linkedin_url)
+            inputs.text("linkedin_input", linkedin_input, candidate.linkedin_url)
             fields_filled.append("linkedin_url")
 
         return FormFillResult(

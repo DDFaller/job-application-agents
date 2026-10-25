@@ -171,7 +171,7 @@ def discover_approved_photo() -> Path | None:
 
 def profile_design(profile: str, with_photo: bool) -> tuple[dict[str, Any], int]:
     if profile == "international":
-        return {"template": "international", "page": {"size": "us-letter"}}, 1
+        return {"template": "international", "page": {"size": "a4"}}, 1
     if profile != "france":
         raise ValueError(f"unknown rendering profile: {profile}")
     design: dict[str, Any] = {
@@ -204,7 +204,7 @@ def _latex_preamble(skill_dir: Path) -> str:
 
 def latex_preamble_for_profile(skill_dir: Path, profile: str) -> str:
     preamble = _latex_preamble(skill_dir)
-    paper = "a4paper" if profile == "france" else "letterpaper"
+    paper = "a4paper"
     return preamble.replace("{{PAPER_SIZE}}", paper)
 
 
@@ -354,6 +354,9 @@ def normalized_pdf_text(path: Path, *, raw: bool = False) -> str:
 
 def reading_order_text(value: object) -> str:
     normalized = unicodedata.normalize("NFKD", str(value or "")).casefold()
+    # PDF dehyphenation can join authored compounds at a line break.
+    # Compare their letters consistently without dropping any content.
+    normalized = re.sub(r"(?<=\w)[\-\u00ad\u2010-\u2015](?=\w)", "", normalized)
     return " ".join(re.sub(r"[^a-z0-9]+", " ", normalized).split())
 
 
@@ -746,6 +749,9 @@ def stage_bundle(args: argparse.Namespace, skill_dir: Path) -> Path:
             layout=profile if is_builtin else "sequential",
             extra_values=extra_values,
         )
+        if bundle.get("inputs", {}).get("profile_selection_json"):
+            from job_application_agents.resume_readability import readable_latex
+            resume_source = readable_latex(resume_source)
         template_view = {
             "id": profile if is_builtin else template_id,
             "kind": "builtin" if is_builtin else "custom",
@@ -778,6 +784,9 @@ def stage_bundle(args: argparse.Namespace, skill_dir: Path) -> Path:
             )
             for name in ("resume.pdf", "motivation-letter.pdf"):
                 shutil.copy2(compile_output / name, stage_dir / name)
+            if bundle.get("inputs", {}).get("profile_selection_json"):
+                from job_application_agents.resume_readability import validate_pdf
+                validate_pdf(compile_output / "resume.pdf")
             resume_document = compile_result["documents"]["resume.pdf"]
             letter_document = compile_result["documents"]["motivation-letter.pdf"]
             # XeTeX's raw extraction can split accented glyphs in the middle of
@@ -955,6 +964,8 @@ def rebuild_current_version(version_dir: Path, skill_dir: Path) -> Path:
         if not path.is_file() or sha256(path) != metadata.get("sha256") or path.stat().st_size != metadata.get("bytes"):
             raise ValueError(f"non-editable version artifact changed or is missing: {name}")
 
+    bundle_path = version_dir / "bundle.json"
+    bundle = load_json_object(bundle_path) if bundle_path.is_file() else {}
     profile = manifest.get("rendering", {}).get("profile", "international")
     max_pages = int(manifest.get("rendering", {}).get("max_pages", 1))
     revision = int(manifest.get("document_revision", 0)) + 1
@@ -989,6 +1000,9 @@ def rebuild_current_version(version_dir: Path, skill_dir: Path) -> Path:
             )
             for name in ("resume.pdf", "motivation-letter.pdf"):
                 shutil.copy2(compile_output / name, rebuild_dir / name)
+            if bundle.get("inputs", {}).get("profile_selection_json"):
+                from job_application_agents.resume_readability import validate_pdf
+                validate_pdf(compile_output / "resume.pdf")
             resume_document = compile_result["documents"]["resume.pdf"]
             letter_document = compile_result["documents"]["motivation-letter.pdf"]
             resume_quality = {

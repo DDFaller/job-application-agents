@@ -70,6 +70,13 @@ class GenericJobAlertParser(BaseEmailParser):
             # Skip common social/nav/unsubscribe links
             netloc_lower = parsed.netloc.lower()
             path_lower = parsed.path.lower()
+            hostname = (parsed.hostname or "").lower()
+            if hostname == "linkedin.com" or hostname.endswith(".linkedin.com"):
+                # A feed post or profile can mention hiring without being a
+                # particular opening. Only direct job pages qualify here;
+                # provider-specific redirect formats belong to its parser.
+                if not re.fullmatch(r"/(?:comm/)?jobs/view/(?:[^/]+-)?\d+/?", path_lower):
+                    continue
             if any(skip in netloc_lower for skip in ("twitter.com", "facebook.com", "instagram.com", "youtube.com", "unsubscribe")):
                 continue
             if any(skip in path_lower for skip in ("unsubscribe", "preference", "privacy-policy", "terms-of-service", "settings", "login")):

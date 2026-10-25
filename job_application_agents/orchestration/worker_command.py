@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -17,18 +18,38 @@ INTEGRATION_SECRET_NAMES = (
     "NOTION_API_KEY",
     "GMAIL_ACCESS_TOKEN",
     "GMAIL_REFRESH_TOKEN",
+    "GMAIL_APP_PASSWORD",
+    "GMAIL_PASSWORD",
+    "GMAIL_OAUTH_TOKEN_PATH",
+    "GMAIL_CLIENT_SECRETS_PATH",
+    "INTEGRATIONS_CONFIG_FILE",
     "GOOGLE_APPLICATION_CREDENTIALS",
     "FIREBASE_TOKEN",
     "BROWSER_COOKIE",
     "PLAYWRIGHT_STORAGE_STATE",
+    "JAA_REVIEW_KEY",
+    "JAA_ENABLE_SUBMISSION",
+)
+
+_CREDENTIAL_ENV_NAME = re.compile(
+    r"(?:^|_)(?:TOKENS?|SECRETS?|PASSWORDS?|PASSWD|CREDENTIALS?|COOKIES?|"
+    r"API_?KEYS?|ACCESS_KEYS?|PRIVATE_KEYS?|STORAGE_STATE)(?:_|$)",
+    re.IGNORECASE,
 )
 
 
 def sanitized_worker_environment() -> dict[str, str]:
-    environment = dict(os.environ)
-    for name in INTEGRATION_SECRET_NAMES:
-        environment.pop(name, None)
-    return environment
+    """Drop credential variables and submission authority without mutating the coordinator.
+
+    Recheck in the worker wrapper: a persistent tmux/Agent Deck server can
+    supply variables absent from the launcher's own environment.
+    """
+    return {
+        name: value
+        for name, value in os.environ.items()
+        if name.upper() not in INTEGRATION_SECRET_NAMES
+        and not _CREDENTIAL_ENV_NAME.search(name)
+    }
 
 
 def resolve_opencode_binary() -> str:
@@ -56,6 +77,7 @@ def stage_prompt(task_path: Path, task: StageTask, *, repository_root: Path) -> 
 Task contract: {task_path.resolve()}
 Required skill: ${task.skill}
 Canonical skill file: {skill_path}
+Stage input scope: {repository_root.resolve() / "skills/manage-job-applications/references/stage-input-scope.md"}
 
 Read the canonical skill file above in full, even if an unnamespaced global skill
 with the same basename exists. Then validate the task contract and follow only
@@ -66,6 +88,16 @@ Resolve stage inputs only from the artifact records in StageTask.inputs. A
 batch-shared artifact may reside under another job key; accept its absolute path
 when it exists and its declared hash validates. Do not reject it based on
 directory ownership or derive a job-local replacement path.
+Read the stage input scope. Native file tools and shell commands have the same
+scope: the task, exact declared inputs, this attempt's outputs, and the named
+skill's relevant repository resources. Do not enumerate parent directories or
+search previous attempts, applications, staging records, reports, or old results
+for examples. A missing private input is a blocker for the coordinator, not
+permission to discover a replacement. If an out-of-scope read already occurred,
+stop with input_scope_violation without repeating the content.
+Governing instructions remain applicable: read applicable AGENTS.md files and
+exact instruction references such as /home/falluba/.codex/RTK.md. Reading those
+required instruction files is permitted; unrelated private data remains out of scope.
 Do not access Notion credentials, submit an application, contact an employer, or
 mark anything APPLIED. Do not edit the master curriculum, approved role-profile
 catalog, batch state, or workflow timing ledger.
@@ -82,6 +114,8 @@ absolute), blocker (null or an object with code, message, retryable, user_action
 and restart_stage), and details (string or null). Copy identity fields from the
 task exactly. A non-retryable blocker must set restart_stage to null; only a
 retryable blocker may name a restart_stage.
+After the stage's validator passes, write this result contract and finish.
+Use this schema directly; do not inspect other jobs' results for formatting.
 """
 
 
@@ -100,8 +134,16 @@ def build_worker_command(
     root = str(repository_root.resolve())
     data_root = str(Path(task.data_root).resolve())
     if profile.harness == "agy":
+        from .model_policy import AGY_FLASH_MODEL
         model_name = profile.model.lower()
         effort = profile.effort
+        if model_name in {"flash", "gemini-flash", AGY_FLASH_MODEL}:
+            model_name = f"{AGY_FLASH_MODEL}-{effort or 'low'}"
+            effort = None
+        elif model_name.startswith(AGY_FLASH_MODEL + "-"):
+            if effort and not model_name.endswith("-" + effort):
+                raise ValueError("Agy model variant conflicts with requested effort")
+            effort = None
         if "gemini" in model_name and not any(model_name.endswith(f"-{s}") for s in ("low", "medium", "high")) and not effort:
             effort = "low"
         command = ["agy", "--add-dir", data_root, "--model", model_name]

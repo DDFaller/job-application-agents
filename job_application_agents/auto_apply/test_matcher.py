@@ -6,6 +6,34 @@ from job_application_agents.auto_apply.matcher import JobMatchScorer, MatchBreak
 
 
 class TestJobMatchScorer(unittest.TestCase):
+    def test_no_candidate_means_unassessed_not_sample_person(self) -> None:
+        for candidate in (None, {}):
+            result = JobMatchScorer.score_job({'technologies': ['Python']}, candidate=candidate)
+            self.assertIsNone(result.total_score)
+            self.assertEqual(result.rating, 'Not assessed')
+            self.assertEqual(result.matched_skills, [])
+            self.assertIsNone(MatchBreakdown.from_dict(result.to_dict()).total_score)
+
+    def test_one_year_requirement_does_not_pass_without_experience(self) -> None:
+        job = {'requirements': ['At least 1 year of development experience']}
+        self.assertEqual(JobMatchScorer.score_job(job, {'years_experience': 0}).experience_score, 0)
+        self.assertEqual(JobMatchScorer.score_job(job, {'years_experience': 0.5}).experience_score, 15)
+        self.assertEqual(JobMatchScorer.score_job(job, {'years_experience': 1}).experience_score, 30)
+
+    def test_keywords_are_not_substrings_and_missing_requirements_are_unknown(self) -> None:
+        result = JobMatchScorer.score_job({'technologies': ['SQL'], 'role': 'Data Engineer', 'location': 'Australia'},
+            {'skills': ['PostgreSQL'], 'target_roles': ['Software Engineer'], 'locations': ['US']})
+        self.assertEqual((result.skills_score, result.role_score, result.location_score), (0, 0, 0))
+        self.assertEqual(result.matched_skills, [])
+        empty = JobMatchScorer.score_job({}, {'skills': ['Python']})
+        self.assertEqual(empty.matched_skills, [])
+        self.assertEqual((empty.evidence_coverage, empty.score_upper_bound), (0, 100))
+
+    def test_company_and_salary_disclosure_do_not_add_fit_points(self) -> None:
+        candidate = {'skills': ['Python']}
+        result = JobMatchScorer.score_job({'company': 'Named', 'compensation': '1 EUR'}, candidate)
+        self.assertEqual((result.company_fit_score, result.compensation_score), (0, 0))
+
     def test_score_gorgias_ai_platform(self) -> None:
         job_data = {
             "company": "Gorgias",
@@ -30,16 +58,16 @@ class TestJobMatchScorer(unittest.TestCase):
             "compensation": "€82,592 – €91,286",
         }
 
-        breakdown = JobMatchScorer.score_job(job_data)
+        breakdown = JobMatchScorer.score_job(job_data, candidate={"skills": job_data["technologies"], "years_experience": 4, "target_roles": ["software engineer"], "locations": ["Paris"]})
         self.assertIsInstance(breakdown, MatchBreakdown)
         self.assertGreaterEqual(breakdown.total_score, 80)
         self.assertLessEqual(breakdown.total_score, 100)
         self.assertGreaterEqual(breakdown.skills_score, 20)
-        self.assertEqual(breakdown.experience_score, 25)
+        self.assertEqual(breakdown.experience_score, 30)
         self.assertEqual(breakdown.role_score, 20)
         self.assertEqual(breakdown.location_score, 15)
-        self.assertEqual(breakdown.company_fit_score, 5)
-        self.assertEqual(breakdown.compensation_score, 5)
+        self.assertEqual(breakdown.company_fit_score, 0)
+        self.assertEqual(breakdown.compensation_score, 0)
         self.assertEqual(breakdown.rating, "High Match")
         self.assertIn("Python", breakdown.matched_skills)
         self.assertIn("React", breakdown.matched_skills)

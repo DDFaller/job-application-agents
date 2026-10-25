@@ -77,6 +77,8 @@ class FirestoreNotionJobRepository:
         payload: dict[str, Any],
         idempotency_key: str | None = None,
     ) -> NotionSyncJob:
+        from job_application_agents.retirement import require_active
+        require_active(self.project_id)
         _, firestore, _ = self._sdk()
         key = idempotency_key or f"{user_id}:{application_id}:{payload.get('current_version', '')}"
         job_id = self.job_id_for_key(user_id, application_id, payload.get("current_version", ""))
@@ -208,6 +210,8 @@ class FirestoreNotionJobRepository:
         return None
 
     def claim(self, worker_id: str, lease_seconds: int = 300) -> NotionSyncJob | None:
+        from job_application_agents.retirement import require_active
+        require_active(self.project_id)
         _, firestore, FieldFilter = self._sdk()
         try:
             query = (

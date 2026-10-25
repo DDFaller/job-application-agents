@@ -35,6 +35,7 @@ class AgentFormSolver:
         page: Any,
         draft: ApplicationDraft,
         max_steps: int = 8,
+        dry_run: bool = False,
     ) -> tuple[bool, VerificationScore, str | None, str | None]:
         """Execute iterative multi-step form solving, file attachments, and confirmation verification."""
         initial_url = page.url
@@ -90,6 +91,10 @@ class AgentFormSolver:
             cls._check_consent_boxes(page)
 
             # D. Evaluate Navigation Controls (Intermediate vs Final Submit)
+            if dry_run:
+                logger.info("🛑 Dry-run mode: stopping before form advancement / final submission.")
+                break
+
             action_taken = cls._advance_or_submit(page)
 
             if action_taken == "final_submit":
@@ -481,9 +486,16 @@ class AgentFormSolver:
             text = (btn.inner_text() or btn.get_attribute("value") or "").strip().lower()
             btn_type = (btn.get_attribute("type") or "").lower()
 
+            # Ignore search bar buttons and navigation search inputs
+            aria_label = (btn.get_attribute("aria-label") or "").lower()
+            data_tracking = (btn.get_attribute("data-tracking-control-name") or "").lower()
+            btn_class = (btn.get_attribute("class") or "").lower()
+            if any(term in aria_label or term in data_tracking or term in btn_class for term in ("search", "haku", "recherche", "buscar")):
+                continue
+
             # Check final submit patterns
             for pat in cls.FINAL_SUBMIT_BUTTON_PATTERNS:
-                if re.search(pat, text, re.IGNORECASE) or (btn_type == "submit" and "next" not in text and "suivant" not in text):
+                if re.search(pat, text, re.IGNORECASE) or (btn_type == "submit" and "next" not in text and "suivant" not in text and text):
                     final_submit_candidate = btn
                     break
 
@@ -514,6 +526,7 @@ class AgentFormSolver:
         candidate: CandidateProfile,
         resume_pdf: Path,
         letter_pdf: Path | None = None,
+        dry_run: bool = False,
     ) -> FormFillResult:
         draft = ApplicationDraft(
             application_id="legacy",
@@ -525,11 +538,11 @@ class AgentFormSolver:
             letter_path=str(letter_pdf) if letter_pdf else None,
             fields=[],
         )
-        success, score = AgentFormSolver.solve_multistep_application(page, draft)
+        success, score, blocker, detail = AgentFormSolver.solve_multistep_application(page, draft, dry_run=dry_run)
         return FormFillResult(
             driver_name="agent-multistep-solver",
             success=success,
-            fields_filled=["multistep_completed"],
+            fields_filled=["multistep_completed"] if success else [],
             resume_uploaded=True,
             letter_uploaded=bool(letter_pdf),
         )

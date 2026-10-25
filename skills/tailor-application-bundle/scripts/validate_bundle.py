@@ -223,6 +223,19 @@ def validate(bundle: dict[str, Any], template: dict[str, Any], bundle_path: Path
     if not isinstance(inputs, dict) or "job_json" not in inputs:
         errors.append("inputs must be an object containing at least job_json")
         return errors
+    if inputs.get("profile_selection_json"):
+        try:
+            import sys
+            repository_root = Path(__file__).resolve().parents[3]
+            if str(repository_root) not in sys.path:
+                sys.path.insert(0, str(repository_root))
+            from job_application_agents.positioning import validate_bundle_binding, validate_positioned_claims
+            selection = json.loads(Path(inputs["profile_selection_json"]).read_text())
+            data_root = Path(inputs["role_profile_source_dir"]).resolve().parent.parent
+            validate_bundle_binding(bundle, selection, data_root)
+            validate_positioned_claims(bundle, selection, data_root)
+        except (OSError, ValueError, KeyError, TypeError, StopIteration) as exc:
+            errors.append("invalid profile selection binding: " + str(exc))
     has_candidate_evidence = bool(inputs.get("candidate_evidence_json"))
     artifacts: dict[str, dict[str, Any]] = {}
     keys_to_verify = [("job_json", "job_sha256")]

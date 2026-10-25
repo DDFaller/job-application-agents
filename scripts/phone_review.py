@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Run a durable Playwright application review session for a phone browser.
-
-The service binds locally by default.  For a private Tailscale connection use
-``--host 0.0.0.0`` and publish the chosen port with ``tailscale serve``.
-"""
+"""Run a live Playwright review session accessible from a phone over LAN/Tailscale."""
 
 from __future__ import annotations
 
@@ -23,160 +19,171 @@ if __name__ == "__main__" and VENV_PYTHON.is_file() and sys.executable != str(VE
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from job_application_agents.auto_apply.draft_models import ApplicationDraft, ApplicationField, ApplicationState
+from playwright.sync_api import sync_playwright
+from job_application_agents.auto_apply.draft_models import ApplicationDraft
 from job_application_agents.auto_apply.local_review_server import LocalReviewServer
 from job_application_agents.auto_apply.review_session import (
     EncryptedCheckpointStore,
     PlaywrightReviewSession,
 )
-from job_application_agents.auto_apply.service import AutoApplyService, validate_public_target_url
-
-
-def _application_paths(app_dir: Path) -> tuple[dict, Path]:
-    current = {}
-    current_path = app_dir / "current.json"
-    if current_path.is_file():
-        current = json.loads(current_path.read_text(encoding="utf-8"))
-    version = current.get("current_version") or current.get("version") or "v001"
-    version_dir = app_dir / version
-    if not version_dir.is_dir():
-        candidates = sorted(p for p in app_dir.iterdir() if p.is_dir() and p.name.startswith("v"))
-        version_dir = candidates[-1] if candidates else app_dir
-    return current, version_dir
-
-
-def _target_url(current: dict, version_dir: Path) -> str:
-    job_data = {}
-    job_path = version_dir / "job.json"
-    if job_path.is_file():
-        job_data = json.loads(job_path.read_text(encoding="utf-8"))
-    value = (
-        current.get("canonical_url")
-        or job_data.get("canonical_url")
-        or job_data.get("source_url")
-        or job_data.get("url")
-        or job_data.get("job_url")
-    )
-    if not value:
-        raise ValueError(f"No job URL found in {version_dir}")
-    return validate_public_target_url(str(value))
+from job_application_agents.auto_apply.service import AutoApplyService
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run a phone-accessible durable Playwright review session.")
-    parser.add_argument("--app-dir", type=Path, required=True, help="Tailored application package directory")
-    parser.add_argument("--profile", type=Path, help="Optional candidate_profile.json")
-    parser.add_argument("--data-dir", type=Path, help="Local encrypted review data directory")
-    parser.add_argument("--host", default="127.0.0.1", help="Bind address; use 0.0.0.0 for Tailscale access")
-    parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--token", help="Review token; otherwise generated and printed once")
-    parser.add_argument("--allow-submit", action="store_true", help="Allow final submit only with the explicit environment gate")
-    parser.add_argument("--headless", action="store_true", help="Run Chromium without a visible desktop window")
+    parser = argparse.ArgumentParser(description="Start interactive phone review session with Playwright.")
+    parser.add_argument(
+        "--app-dir",
+        type=Path,
+        required=True,
+        help="Path to the tailored application package directory",
+    )
+    parser.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="Host address to bind review server (default: 0.0.0.0)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="Port to bind review server (default: 8080)",
+    )
+    parser.add_argument(
+        "--token",
+        default="demo123",
+        help="Review token for mobile auth (default: demo123)",
+    )
+    parser.add_argument(
+        "--allow-submit",
+        action="store_true",
+        help="Allow the phone to trigger final submission",
+    )
     args = parser.parse_args()
 
-    app_dir = args.app_dir.expanduser().resolve()
-    if not app_dir.is_dir():
-        parser.error(f"Application directory not found: {app_dir}")
-    current, version_dir = _application_paths(app_dir)
-    target_url = _target_url(current, version_dir)
+    app_dir = args.app_dir.resolve()
+    v_dir = app_dir / "v001"
+    if not v_dir.is_dir():
+        candidates = sorted([d for d in app_dir.glob("v*") if d.is_dir()])
+        v_dir = candidates[-1] if candidates else app_dir
+
+    job_file = app_dir / "job.json"
+    if not job_file.is_file():
+        print(f"Error: job.json not found in {app_dir}", file=sys.stderr)
+        return 1
+
+    job_data = json.loads(job_file.read_text(encoding="utf-8"))
+    title = job_data.get("role") or job_data.get("title") or "Role"
+    company = job_data.get("company", "Company")
+    target_url = (
+        job_data.get("application_url")
+        or job_data.get("canonical_url")
+        or job_data.get("source_url")
+        or job_data.get("url")
+    )
+
+    if not target_url:
+        print(f"Error: Could not resolve target URL from {job_file}", file=sys.stderr)
+        return 1
+
     service = AutoApplyService()
-    candidate = service.load_candidate_profile(args.profile)
-    resume = version_dir / "resume.pdf"
-    if not resume.is_file():
-        pdfs = sorted(version_dir.glob("*.pdf"))
-        if pdfs:
-            resume = pdfs[0]
-    letter = version_dir / "motivation-letter.pdf"
-    letter_path = letter if letter.is_file() else None
-    app_id = str(current.get("application_id") or app_dir.name)
-    data_dir = (args.data_dir or (app_dir / ".review")).expanduser().resolve()
-    store = EncryptedCheckpointStore(data_dir)
-    checkpoint = store.load()
+    candidate = service.load_candidate_profile()
 
-    if checkpoint and checkpoint.state in {ApplicationState.SUBMITTED_CONFIRMED.value, ApplicationState.SKIPPED.value}:
-        print(f"A terminal review checkpoint already exists: {checkpoint.state}")
-        return 0
+    resume_pdf = v_dir / "resume.pdf"
+    if not resume_pdf.is_file():
+        pdfs = list(v_dir.glob("*.pdf"))
+        resume_pdf = pdfs[0] if pdfs else v_dir / "resume.pdf"
 
-    from playwright.sync_api import sync_playwright
+    letter_pdf = v_dir / "motivation-letter.pdf"
+    if not letter_pdf.is_file():
+        letter_pdf = None
 
-    profile_dir = data_dir / "browser-profile"
-    profile_dir.mkdir(parents=True, exist_ok=True)
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch_persistent_context(
-            user_data_dir=str(profile_dir),
-            headless=args.headless,
+    store_dir = app_dir / ".review_store"
+    store = EncryptedCheckpointStore(store_dir)
+
+    print("\n" + "=" * 60)
+    print(" PLAYWRIGHT PHONE-CONTROLLED REVIEW SESSION")
+    print("=" * 60)
+    print(f"Opening:   {title} at {company}")
+    print(f"URL:       {target_url}")
+    print(f"Candidate: {candidate.full_name}")
+    print("=" * 60 + "\n")
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            headless=True,
             args=["--no-sandbox"],
+        )
+        context = browser.new_context(
             viewport={"width": 1280, "height": 900},
             locale="en-US",
             timezone_id="Europe/Paris",
         )
+        page = context.new_page()
+
+        print(f"Navigating browser to {target_url}...")
+        page.goto(target_url, wait_until="domcontentloaded")
+        page.wait_for_timeout(2000)
+
+        # Build initial draft
+        initial_draft = ApplicationDraft(
+            application_id=app_dir.name,
+            company=company,
+            job_title=title,
+            target_url=target_url,
+            revision=1,
+            fields=[],
+            resume_path=str(resume_pdf.resolve()),
+            letter_path=str(letter_pdf.resolve()) if letter_pdf else None,
+        )
+
+        session = PlaywrightReviewSession(
+            page=page,
+            draft=initial_draft,
+            candidate=candidate,
+            store=store,
+            allow_submission=args.allow_submit,
+        )
+
+        # Initialize the first form step (inspects and prefills)
+        print("Inspecting and prefilling step 1...")
+        session.prepare_current_step()
+
+        # Start review server
+        token = args.token
+        server = LocalReviewServer(
+            session=session,
+            host=args.host,
+            port=args.port,
+            token=token,
+        )
+        base_url = server.start()
+
+        print("\n" + "*" * 60)
+        print(" REVIEW SERVER READY!")
+        print(f" Access on Phone (Wi-Fi):     http://10.123.204.144:{args.port}/")
+        print(f" Access on Phone (Tailscale): http://100.109.205.45:{args.port}/")
+        print(f" Review Token:                {token}")
+        print("*" * 60 + "\n")
+        print("Open the link on your phone, type the Review Token, and you will see:")
+        print(" - Prefilled inputs")
+        print(" - Resume / motivation letter links")
+        print(" - 'Approve step' button to tell Playwright to proceed to the next step\n")
+        print("Press Ctrl+C in terminal to stop the session.")
+
         try:
-            page = browser.pages[0] if browser.pages else browser.new_page()
-            resume_url = checkpoint.page_url if checkpoint and checkpoint.page_url else target_url
-            page.goto(resume_url, wait_until="domcontentloaded")
-            page.wait_for_timeout(1500)
-
-            if checkpoint:
-                draft = ApplicationDraft(
-                    application_id=checkpoint.application_id,
-                    company=checkpoint.company,
-                    job_title=checkpoint.job_title,
-                    target_url=checkpoint.target_url,
-                    revision=checkpoint.revision,
-                    fields=[ApplicationField.from_dict(f) for f in checkpoint.fields],
-                    resume_path=checkpoint.resume_path,
-                    letter_path=checkpoint.letter_path,
-                    state=ApplicationState.REVIEW_READY,
-                )
-                step_index = checkpoint.step_index
-            else:
-                draft = ApplicationDraft(
-                    application_id=app_id,
-                    company=str(current.get("company") or current.get("company_name") or "Unknown company"),
-                    job_title=str(current.get("role") or current.get("job_title") or "Software Engineer"),
-                    target_url=target_url,
-                    revision=1,
-                    fields=[],
-                    resume_path=str(resume.resolve()),
-                    letter_path=str(letter_path.resolve()) if letter_path else None,
-                )
-                step_index = 1
-
-            session = PlaywrightReviewSession(
-                page=page,
-                draft=draft,
-                candidate=candidate,
-                store=store,
-                browser_profile_dir=profile_dir,
-                allow_submission=args.allow_submit,
-            )
-            session.step_index = step_index
-            if checkpoint:
-                session.visible_field_ids = list(checkpoint.visible_field_ids)
-            session.prepare_current_step()
-            server = LocalReviewServer(session, host=args.host, port=args.port, token=args.token)
-            url = server.start()
-            print("=== Phone Review Session ===")
-            print(f"Review URL: {url}")
-            print(f"Review token: {server.token}")
-            if args.host == "0.0.0.0":
-                print("Publish privately with: tailscale serve --https=443 http://127.0.0.1:%s" % server.port)
-            print("The browser will remain open until the application is submitted, skipped, or stopped.")
-            try:
-                while session.state not in {
-                    ApplicationState.SUBMITTED_CONFIRMED.value,
-                    ApplicationState.SUBMISSION_UNCERTAIN.value,
-                    ApplicationState.SKIPPED.value,
-                    ApplicationState.FAILED.value,
-                }:
-                    time.sleep(0.5)
-            finally:
-                server.stop()
+            while True:
+                time.sleep(1)
+                if session.state in {"SUBMITTED_CONFIRMED", "SKIPPED"}:
+                    print(f"Session finished with state: {session.state}")
+                    break
+        except KeyboardInterrupt:
+            print("\nShutting down review server...")
         finally:
+            server.stop()
             browser.close()
 
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    sys.exit(main())

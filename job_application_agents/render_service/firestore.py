@@ -81,6 +81,8 @@ class FirestoreRenderJobRepository:
         )
 
     def enqueue(self, request: RenderRequest, idempotency_key: str) -> RenderJob:
+        from job_application_agents.retirement import require_active
+        require_active(self.project_id)
         _, firestore, _ = self._sdk()
         job_id = self.job_id_for_key(idempotency_key)
         reference = self.client.collection(JOB_COLLECTION).document(job_id)

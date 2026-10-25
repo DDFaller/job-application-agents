@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 from pathlib import Path
 import re
@@ -46,16 +47,20 @@ class FileSystemStagingDestination(BaseJobDestination):
             staging_path = self.base_staging_dir / folder_name
             staging_path.mkdir(parents=True, exist_ok=True)
 
-            # Write source.md if not already written
+            # Persist the evidence used by the extractor, never a title-only stub.
             source_file = staging_path / "source.md"
-            if not source_file.is_file() and job.job_data.source_document:
+            if job.source_text:
+                source_text = job.source_text
+            elif job.job_data.source_document:
                 orig_src = Path(job.job_data.source_document)
-                if orig_src.is_file():
-                    source_file.write_text(orig_src.read_text(encoding="utf-8"), encoding="utf-8")
-                else:
-                    source_file.write_text(f"# {job.job_data.role}\n\nCompany: {job.job_data.company}\n\n", encoding="utf-8")
-            elif not source_file.is_file():
-                source_file.write_text(f"# {job.job_data.role}\n\nCompany: {job.job_data.company}\n\n", encoding="utf-8")
+                source_text = orig_src.read_text(encoding="utf-8")
+            else:
+                raise ValueError("Cannot stage a posting without its source evidence")
+            source_hash = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
+            if job.job_data.source_sha256 and source_hash != job.job_data.source_sha256:
+                raise ValueError("Source evidence does not match the extracted posting hash")
+            source_file.write_text(source_text, encoding="utf-8")
+            job.job_data.source_sha256 = source_hash
 
             # Update job_data source_document absolute path and recompute hash if needed
             job.job_data.source_document = str(source_file.resolve())

@@ -12,15 +12,15 @@
 }
 
 \newcommand{\resumeSubheading}[4]{%
-  \noindent\begin{tabular*}{\textwidth}[t]{l@{\extracolsep{\fill}}r}
+  \noindent\begin{tabularx}{\linewidth}[t]{@{}>{\raggedright\arraybackslash}X >{\raggedleft\arraybackslash}p{0.34\linewidth}@{}}
     \textbf{#1} & \textbf{\small #2}\\
     \textit{\small #3} & \textit{\small #4}
-  \end{tabular*}\vspace{-2pt}
+  \end{tabularx}\vspace{-2pt}
 }
 \newcommand{\resumeProjectHeading}[2]{%
-  \noindent\begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+  \noindent\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}X >{\raggedleft\arraybackslash}p{0.25\linewidth}@{}}
     \small\textbf{#1} & \textbf{\small #2}
-  \end{tabular*}\vspace{-2pt}
+  \end{tabularx}\vspace{-2pt}
 }
 \newcommand{\resumeDescription}[1]{\noindent\small #1\par\vspace{1pt}}
 \newenvironment{resumeItems}{\begin{itemize}}{\end{itemize}\vspace{-3pt}}

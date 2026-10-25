@@ -24,6 +24,7 @@ from job_application_agents.orchestration import (
     TmuxExecutor,
     WorkerProfile,
 )
+from job_application_agents.orchestration.model_policy import DEFAULT_EFFORT, DEFAULT_MODEL, resolve_model
 from job_application_agents.orchestration.worker_command import resolve_opencode_binary
 
 
@@ -42,7 +43,13 @@ def parser() -> argparse.ArgumentParser:
         default=Path.home() / "Documents" / "job-search",
         help="Private working directory for candidate sources and generated applications (default: ~/Documents/job-search)",
     )
-    result.add_argument("--role-profile", help="Default role profile to use for jobs (e.g. backend-engineer)")
+    result.add_argument("--role-profile", help="Explicit positioning profile ID; still subject to evidence qualification")
+    result.add_argument("--prepare-selected", action="store_true",
+                        help="User explicitly selected these jobs: expose fit and prepare documents despite gaps; never submit")
+    result.add_argument("--automatic-fit-threshold", type=int,
+                        help="Optional 0–100 threshold to report automatic-application eligibility; does not enable submission")
+    result.add_argument("--junior-tailoring-instruction", type=Path,
+                        help="Private direct-user instruction authorizing junior CV preparation despite gaps")
     result.add_argument("--executor", choices=("agent-deck", "tmux", "local"), default="agent-deck")
     result.add_argument("--harness", choices=("agy", "codex", "opencode", "muse"), default="agy")
     result.add_argument("--interactive", action="store_true", default=True, help="Enable interactive co-pilot mode in tmux/agent-deck")
@@ -60,8 +67,8 @@ def parser() -> argparse.ArgumentParser:
         "that runs the controller tick loop; per-stage subworkers launch as "
         "their own sessions under the shared --group",
     )
-    result.add_argument("--model", default="gpt-5.6-luna")
-    result.add_argument("--effort", choices=("low", "medium", "high"))
+    result.add_argument("--model", default=None, help=f"Worker model (default: policy model {DEFAULT_MODEL})")
+    result.add_argument("--effort", choices=("low", "medium", "high"), default=None, help=f"Worker effort (default: policy effort {DEFAULT_EFFORT})")
     result.add_argument(
         "--profiles",
         type=Path,
@@ -142,10 +149,13 @@ def load_profiles(path: Path) -> dict[str, WorkerProfile]:
 def resolve_profiles(args: argparse.Namespace) -> dict[str, WorkerProfile]:
     if args.profiles:
         return load_profiles(args.profiles)
-    profile = WorkerProfile(
-        args.harness, args.model, args.effort, auto_approve=args.auto_approve
-    )
-    return {stage.profile: profile for stage in DEFAULT_APPLICATION_STAGES}
+    profiles = {}
+    for stage in DEFAULT_APPLICATION_STAGES:
+        model, effort = resolve_model(stage.profile, args.model, args.effort)
+        profiles[stage.profile] = WorkerProfile(
+            args.harness, model, effort, auto_approve=args.auto_approve
+        )
+    return profiles
 
 
 def build_executor(
@@ -283,7 +293,10 @@ def main() -> int:
     )
     if args.launch_host:
         state_path = controller.create(
-            load_jobs(args.jobs, default_role_profile=args.role_profile)
+            load_jobs(args.jobs, default_role_profile=args.role_profile),
+            junior_tailoring_instruction=args.junior_tailoring_instruction,
+            prepare_selected=args.prepare_selected,
+            automatic_fit_threshold=args.automatic_fit_threshold,
         )
         batch_id = json.loads(state_path.read_text(encoding="utf-8"))["batch_id"]
         host_argv = build_host_argv(args, data_root, state_path)
@@ -308,7 +321,10 @@ def main() -> int:
     if state_path is None:
         if args.cancel:
             raise SystemExit("--cancel requires --state")
-        state_path = controller.create(load_jobs(args.jobs, default_role_profile=args.role_profile))
+        state_path = controller.create(load_jobs(args.jobs, default_role_profile=args.role_profile),
+                                       junior_tailoring_instruction=args.junior_tailoring_instruction,
+                                       prepare_selected=args.prepare_selected,
+                                       automatic_fit_threshold=args.automatic_fit_threshold)
         print(json.dumps({"event": "created", "state": str(state_path)}))
     if args.cancel:
         state = controller.cancel(state_path)
@@ -321,11 +337,21 @@ def main() -> int:
         current = snapshot(state)
         now = time.monotonic()
         if current != previous or now - last_report >= 45:
-            print(json.dumps({"event": "status", "batch": state["batch_id"], "jobs": current}))
+            print(json.dumps({"event": "status", "batch": state["batch_id"], "jobs": current,
+                "fit": {k: {"score": j["fit_report"]["assessment"]["score"],
+                    "score_upper_bound": j["fit_report"]["assessment"]["score_upper_bound"],
+                    "evidence_coverage": j["fit_report"]["assessment"]["evidence_coverage"],
+                    "gaps": j["fit_report"]["assessment"]["gaps"],
+                    "automatic_application": j["fit_report"]["automatic_application"]}
+                    for k, j in state["jobs"].items() if j.get("fit_report")},
+                "selection_reasons": {k: j.get("selection_reason") for k, j in state["jobs"].items() if j.get("selection_reason")}}))
             previous = current
             last_report = now
+        if state["status"] == "awaiting_fit_review":
+            print("Fit assessments are ready. Use scripts/review_job_fit.py to inspect and record prepare/skip decisions, then resume --state.")
+            return 0
         if args.once or state["status"] == "complete":
-            return 0 if all(value == "prepared" for value in current.values()) else 2
+            return 0 if all(value in {"prepared", "skipped"} for value in current.values()) else 2
         time.sleep(args.interval)
 
 

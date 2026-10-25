@@ -170,7 +170,9 @@ class NotionPlugin(DocumentSinkPlugin):
         match = version_data.get("match", {}) or application_data.get("match", {})
 
         # Match Score & Breakdown
-        match_score = version_data.get("match_score") or application_data.get("match_score")
+        match_score = version_data.get("match_score")
+        if match_score is None:
+            match_score = application_data.get("match_score")
         match_breakdown = version_data.get("match_breakdown") or application_data.get("match_breakdown")
         if match_score is None and job:
             from job_application_agents.auto_apply.matcher import JobMatchScorer

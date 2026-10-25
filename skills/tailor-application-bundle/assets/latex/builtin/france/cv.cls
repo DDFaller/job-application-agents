@@ -18,7 +18,8 @@
 \RequirePackage{fontawesome5}
 \RequirePackage{mfirstuc}
 \RequirePackage{parskip}
-\RequirePackage[left=0cm,top=0cm,bottom=0cm,right=0cm]{geometry}
+\RequirePackage[margin=1.2cm]{geometry}
+\setlength{\fboxsep}{0pt}
 \RequirePackage{xcolor}
 \RequirePackage{tikz}
 \RequirePackage{adjustbox}

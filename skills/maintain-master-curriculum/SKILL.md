@@ -84,3 +84,20 @@ never resumes an application automatically.
   documents outside the canonical source directory.
 - Never access Notion, submit an application, contact an employer, or change an
   application status from this skill.
+
+## Positioning library publication
+
+For the modern positioning library, use the separate contract in
+`skills/select-application-profile/references/contracts.md`. Stage the exact
+library and Markdown/LaTeX/PDF baseline previews, then obtain an independent
+claim-level review binding all preview hashes. The same explicit-approval rule
+above applies. Validate without activating:
+
+```bash
+python3 scripts/publish_positioning_library.py --library <library> --review <review> --data-root <private-root>
+```
+
+Only after approval of these exact artifacts, add `--approval APPROVED` to create
+an immutable positioning release and atomically activate its separate pointer.
+Legacy catalog publication remains unchanged. Direct user statements may be
+separate hashed evidence inputs; never infer eligibility from spoken language.

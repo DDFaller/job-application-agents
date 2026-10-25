@@ -192,7 +192,7 @@ class AgentDeckExecutor:
                 return result
             return ExecutionObservation("failed", "Agent Deck session disappeared", "missing")
         status = str(session.get("status", "unknown"))
-        if status in {"error", "dead", "stopped", "killed", "idle", "waiting"}:
+        if status in {"error", "dead", "stopped", "killed", "idle"}:
             result = _result_observation(handle)
             if result:
                 return result
@@ -200,7 +200,7 @@ class AgentDeckExecutor:
             return ExecutionObservation("failed", "worker exited without a result contract", status)
         if status in {"stopped", "killed"}:
             return ExecutionObservation("stopped", "worker stopped without a result contract", status)
-        if status in {"idle", "waiting"}:
+        if status == "idle":
             if self.interactive:
                 return ExecutionObservation("running", raw_status=status)
             return ExecutionObservation("failed", "worker became idle without a result contract", status)

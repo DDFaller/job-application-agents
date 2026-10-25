@@ -64,6 +64,8 @@ class Worker:
             self.current_job = None
 
     def run(self, once: bool = False) -> int:
+        from job_application_agents.retirement import require_active
+        require_active(getattr(self.repository, "project_id", None))
         self.repository.register_worker(self.worker_id, IMAGE_VERSION, capabilities())
         if not all(capabilities().values()):
             raise RuntimeError("worker image is missing required rendering tools")

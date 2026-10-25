@@ -148,7 +148,7 @@ function renderTopQueue(apps) {
   apps.forEach((app, idx) => {
     const isSelected = app.id === currentAppId;
     const rank = `#${idx + 1}`;
-    const score = app.match_score || 0;
+    const score = Number.isFinite(app.match_score) ? app.match_score : null;
     const company = escapeHtml(app.company || "Target");
     const role = escapeHtml(app.role || "Software Engineer");
 
@@ -170,7 +170,7 @@ function renderTopQueue(apps) {
       <div class="flex items-center justify-between w-full mb-1">
         <span class="text-[10px] font-mono font-bold ${isSelected ? 'text-sky-400' : 'text-slate-500'}">${rank}</span>
         <span class="text-[10px] font-bold px-1.5 py-0.2 rounded-full border ${scoreColor}">
-          🎯 ${score}%
+          🎯 ${score === null ? "Not assessed" : `${score}/100`}
         </span>
       </div>
       <div class="font-bold text-xs text-slate-100 truncate w-full">${company}</div>
@@ -255,17 +255,13 @@ function renderDraft(draft) {
   const hashEl = document.getElementById("draftHash");
   if (hashEl) hashEl.innerText = draft.draft_hash ? `Hash: ${draft.draft_hash}` : "";
 
-  const score = draft.match_score || 0;
-  const bd = draft.match_breakdown || {
-    skills_score: Math.round(score * 0.3),
-    experience_score: Math.round(score * 0.25),
-    role_score: Math.round(score * 0.2),
-    location_score: Math.round(score * 0.15),
-  };
+  const score = Number.isFinite(draft.match_score) ? draft.match_score : null;
+  const bd = draft.match_breakdown || {};
+  const weights = bd.weights || { skills_score: 30, experience_score: 25, role_score: 20, location_score: 15 };
 
   const scoreBadge = document.getElementById("matchScoreBadge");
   if (scoreBadge) {
-    scoreBadge.innerText = `🎯 ${score}% Match`;
+    scoreBadge.innerText = score === null ? "Fit not assessed" : `🎯 ${score}/100 supported fit`;
     scoreBadge.className =
       score >= 80
         ? "text-xs bg-emerald-950/80 text-emerald-400 border border-emerald-800/80 px-2 py-0.5 rounded-full font-bold"
@@ -275,18 +271,26 @@ function renderDraft(draft) {
   }
 
   const sEl = document.getElementById("skillsScore");
-  if (sEl) sEl.innerText = `${bd.skills_score || 0}/30`;
+  if (sEl) sEl.innerText = Number.isFinite(bd.skills_score) ? `${bd.skills_score}/${weights.skills_score}` : "Not assessed";
   const eEl = document.getElementById("expScore");
-  if (eEl) eEl.innerText = `${bd.experience_score || 0}/25`;
+  if (eEl) eEl.innerText = Number.isFinite(bd.experience_score) ? `${bd.experience_score}/${weights.experience_score}` : "Not assessed";
   const rEl = document.getElementById("roleScore");
-  if (rEl) rEl.innerText = `${bd.role_score || 0}/20`;
+  if (rEl) rEl.innerText = Number.isFinite(bd.role_score) ? `${bd.role_score}/${weights.role_score}` : "Not assessed";
   const lEl = document.getElementById("locScore");
-  if (lEl) lEl.innerText = `${bd.location_score || 0}/15`;
+  if (lEl) lEl.innerText = Number.isFinite(bd.location_score) ? `${bd.location_score}/${weights.location_score}` : "Not assessed";
 
   // Render fields directly from Firestore document
   const container = document.getElementById("fieldsContainer");
   if (!container) return;
   container.innerHTML = "";
+
+  if (bd.rubric_version === "evidence-fit-v1") {
+    const details = document.createElement("div");
+    details.className = "bg-slate-900 border border-slate-800 rounded-xl p-3 text-sm";
+    details.innerHTML = `<p>Evidence coverage: ${escapeHtml(bd.evidence_coverage)}%. Supported fit range: ${escapeHtml(score)}–${escapeHtml(bd.score_upper_bound)}/100.</p>`
+      + (bd.gaps || []).map(c => `<p class="mt-2"><strong>${escapeHtml(c.label)}: ${escapeHtml(c.status)}</strong><br>${escapeHtml(c.rationale)}</p>`).join("");
+    container.appendChild(details);
+  }
 
   (draft.fields || []).forEach((f) => {
     const badgeColors = {

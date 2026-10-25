@@ -123,6 +123,7 @@ class JobIngestionPipeline(JobSourceIntegration):
         since_days: int | None = None,
         unread_only: bool = True,
         providers: list[str] | None = None,
+        only_gmail_ids: list[str] | None = None,
         force_recheck: bool = False,
         recheck_message_id: str | None = None,
         recheck_uid: str | None = None,
@@ -151,17 +152,33 @@ class JobIngestionPipeline(JobSourceIntegration):
             min_score,
         )
 
-        # 1. Fetch email alert messages
-        messages = self.email_client.fetch_messages(
-            sender_filters=senders,
-            criteria=criteria,
-            limit=limit,
-            since_days=since_days,
-            # Configured senders are an optional narrowing filter. The normal
-            # ingestion path must see messages whose provider appears only in
-            # subject/body, so it performs a mailbox-wide candidate search.
-            search_all=senders is None,
-        )
+        # 1. Fetch email alert messages. Push deliveries bypass the mailbox
+        # scan entirely and fetch only the notified IDs.
+        if only_gmail_ids is not None:
+            fetch_one = getattr(self.email_client, "fetch_message", None)
+            if fetch_one is None:
+                raise ValueError("only_gmail_ids requires a client with fetch_message")
+            messages = []
+            for gmail_id in only_gmail_ids:
+                try:
+                    message = fetch_one(gmail_id)
+                except NotImplementedError as exc:
+                    raise ValueError(
+                        "only_gmail_ids requires a client with fetch_message"
+                    ) from exc
+                if message is not None:
+                    messages.append(message)
+        else:
+            messages = self.email_client.fetch_messages(
+                sender_filters=senders,
+                criteria=criteria,
+                limit=limit,
+                since_days=since_days,
+                # Configured senders are an optional narrowing filter. The normal
+                # ingestion path must see messages whose provider appears only in
+                # subject/body, so it performs a mailbox-wide candidate search.
+                search_all=senders is None,
+            )
         result.total_emails_scanned = len(messages)
         result.total_emails_fetched = len(messages)
 
@@ -236,7 +253,9 @@ class JobIngestionPipeline(JobSourceIntegration):
                             message_errors.append(
                                 f"Staging failed for job '{alert.title}' ({alert.canonical_url})"
                             )
-                        if ingested.match_score >= 80:
+                        if ingested.match_score is None:
+                            result.total_unassessed += 1
+                        elif ingested.match_score >= 80:
                             result.total_high_matches += 1
                         elif ingested.match_score >= 60:
                             result.total_medium_matches += 1
@@ -319,6 +338,13 @@ class JobIngestionPipeline(JobSourceIntegration):
 
         job_id = job_posting.source_job_id or alert.job_id or f"job-{int(time.time()*1000)}"
 
+        if job_posting.extraction_status == "blocked":
+            return IngestedJob(
+                job_id=job_id, job_data=job_posting, status="FAILED",
+                source_text=source_text,
+                notes="Public posting retrieval blocked; no scoring or staging performed",
+            )
+
         # B.0 Zero-Token Title Prefilter Gate: filter out jobs matching excluded keywords (e.g. chef, manager)
         title_decision = self.title_prefilter.evaluate_job(job_posting)
         if not title_decision.passed:
@@ -378,6 +404,7 @@ class JobIngestionPipeline(JobSourceIntegration):
         match_score = match_breakdown_obj.total_score
         match_rating = match_breakdown_obj.rating
         match_dict = match_breakdown_obj.to_dict()
+        keep_for_review = match_score is None or match_score >= min_score
 
         ingested = IngestedJob(
             job_id=job_id,
@@ -387,12 +414,14 @@ class JobIngestionPipeline(JobSourceIntegration):
             match_breakdown=match_dict,
             source_email_sender=alert.email_sender,
             source_email_subject=alert.metadata.get("email_subject"),
-            status="MATCHED" if match_score >= min_score else "SKIPPED",
-            notes="" if match_score >= min_score else f"Score {match_score} below minimum threshold {min_score}",
+            status="MATCHED" if keep_for_review else "SKIPPED",
+            notes=("Fit not assessed; candidate evidence review required" if match_score is None
+                   else "" if keep_for_review else f"Score {match_score} below minimum threshold {min_score}"),
+            source_text=source_text,
         )
 
-        # D. Stage job if score >= threshold and not dry run
-        if not dry_run and match_score >= min_score:
+        # Missing evidence remains available for review; it is not a rejection.
+        if not dry_run and keep_for_review:
             enabled_destinations = 0
             successful_destinations = 0
             for dest in self.destinations:

@@ -1,0 +1,107 @@
+%-------------------------------------------------------------------------------
+% Modern High-Conversion Motivation / Cover Letter Template in LaTeX
+% Built to match the exact typography, headers, and visual style of the CV.
+% Compiles with: pdflatex (recommended), xelatex, or lualatex
+% Compatible with: Overleaf, TeX Live, MacTeX, MiKTeX
+%-------------------------------------------------------------------------------
+
+\documentclass[letterpaper,11pt]{article}
+
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\usepackage{fontawesome5}
+\usepackage{microtype}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+
+% ATS Parser Compliance & Plaintext Extraction
+\input{glyphtounicode}
+\pdfgentounicode=1
+
+% Page layout and margins (matches CV design system)
+\usepackage[margin=0.75in]{geometry}
+
+% Color Definitions (consistent with CV template)
+\definecolor{primary}{RGB}{15, 23, 42}       % Slate-900 (Main text & headings)
+\definecolor{subtext}{RGB}{71, 85, 105}      % Slate-600 (Meta info & dates)
+\definecolor{accent}{RGB}{2, 132, 199}       % Sky-600 (Hyperlinks & subtle accents)
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=accent,
+    urlcolor=accent,
+    pdfnewwindow=true
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\setlength{\footskip}{12pt}
+
+% Paragraph formatting for readability
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{10pt}
+
+%-------------------------------------------------------------------------------
+% LETTER CONTENT STARTS HERE
+%-------------------------------------------------------------------------------
+\begin{document}
+
+%---------- HEADER (Identical to CV for unified personal branding) ----------
+\begin{center}
+    {\Huge \textbf{ALEXANDER MERCER}} \\ \vspace{4pt}
+    \small
+    \faMapMarker*\ San Francisco, CA \ \ $|$ \ \
+    \faPhone*\ +1 (555) 019-2834 \ \ $|$ \ \
+    \faEnvelope\ \href{mailto:alex.mercer@email.com}{alex.mercer@email.com} \ \ $|$ \ \
+    \faLinkedin\ \href{https://linkedin.com/in/alexandermercer}{linkedin.com/in/alexandermercer} \ \ $|$ \ \
+    \faGithub\ \href{https://github.com/alexmercer}{github.com/alexmercer}
+\end{center}
+\vspace{-4pt}
+\color{primary}\hrule height 0.8pt \color{black}
+\vspace{12pt}
+
+%---------- METADATA & RECIPIENT BLOCK ----------
+\begin{tabular*}{\textwidth}{l@{\extracolsep{\fill}}r}
+  \textbf{To:} Engineering Hiring Team & \textbf{Date:} October 24, 2026 \\
+  Datadog & \\
+  620 8th Avenue, New York, NY 10018 & \\
+\end{tabular*}
+
+\vspace{6pt}
+\noindent\textbf{\large Subject: Application for Senior Platform Engineer (Core Telemetry) --- Job ID: \#DD-84920}
+\vspace{6pt}
+
+%---------- SALUTATION ----------
+Dear Datadog Engineering Team,
+
+%---------- PARAGRAPH 1: THE HOOK & IMMEDIATE VALUE PROPOSITION ----------
+I am writing to express my strong interest in the Senior Platform Engineer role on Datadog's Core Telemetry team. Having spent the last four years building distributed ingestion pipelines that process tens of millions of events daily at Stripe and DoorDash, I have followed Datadog's recent advancements in high-throughput vector processing and distributed tracing with keen admiration. I am excited by the opportunity to bring my deep background in Go, Kubernetes infrastructure optimization, and fault-tolerant streaming architecture to your core platform initiatives.
+
+%---------- PARAGRAPH 2: CORE PROOF POINT (STAR / XYZ EVIDENCE) ----------
+In my current role as a Senior Platform Engineer at Stripe, I led the architectural overhaul of our real-time transaction ingestion pipeline. Facing significant burst-load saturation during holiday volumes, I re-architected the pipeline into an asynchronous event stream using Go and Kafka, integrated Karpenter for intelligent Kubernetes node provisioning, and introduced strict backpressure mechanisms. This reduced peak processing latency by 42\%, cut AWS compute expenditure by \$320,000 annually, and maintained 99.995\% uptime under sustained loads of 18M+ daily events. I take pride in building systems that not only scale under extreme load, but remain developer-friendly, resilient, and observable under failure conditions.
+
+%---------- PARAGRAPH 3: STRATEGIC FIT & COMPANY RESONANCE (WHY THEM) ----------
+What particularly excites me about Datadog is your engineering commitment to sub-millisecond query performance at hyper-scale. Your team's work on reducing telemetry overhead without sacrificing granularity aligns directly with projects I have driven in open source and distributed schedulers. With my hands-on experience tuning high-throughput Kafka clusters, designing resilient gRPC communication protocols, and mentoring engineers across cross-functional teams, I am confident I can make an immediate, tangible impact on your pipeline reliability and operational efficiency.
+
+%---------- PARAGRAPH 4: CALL TO ACTION & PROFESSIONAL SIGN-OFF ----------
+I would welcome the opportunity to speak with your team about how my experience building resilient, cost-effective distributed systems can support Datadog’s expanding platform goals. Thank you for your time and consideration, and I look forward to the possibility of discussing this role further.
+
+\vspace{12pt}
+Sincerely,
+
+\vspace{4pt}
+\textbf{Alexander Mercer} \\
+\textit{Senior Software Engineer}
+
+\end{document}

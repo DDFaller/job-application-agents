@@ -6,6 +6,7 @@ import time
 from typing import Any
 
 from .base import BaseFormDriver
+from ..interaction import form_input
 from ..models import CandidateProfile, FormFillResult, SubmissionReceipt
 
 
@@ -26,6 +27,7 @@ class LeverFormDriver(BaseFormDriver):
         letter_pdf: Path | None = None,
         job_data: dict[str, Any] | None = None,
     ) -> FormFillResult:
+        inputs = form_input(page)
         fields_filled: list[str] = []
         resume_uploaded = False
         letter_uploaded = False
@@ -46,54 +48,46 @@ class LeverFormDriver(BaseFormDriver):
         # 1. Resume Upload
         resume_input = page.locator('input[name="resume"], input[type="file"]').first
         if resume_input.count() > 0 and resume_pdf.is_file():
-            resume_input.set_input_files(str(resume_pdf.resolve()))
+            inputs.upload("resume_input", resume_input, resume_pdf)
             resume_uploaded = True
             fields_filled.append("resume_file")
 
         # 2. Candidate Personal Information
         name_input = page.locator('input[name="name"]').first
         if name_input.is_visible():
-            name_input.fill(candidate.full_name)
+            inputs.text("name_input", name_input, candidate.full_name)
             fields_filled.append("name")
 
         email_input = page.locator('input[name="email"]').first
         if email_input.is_visible():
-            email_input.fill(candidate.email)
+            inputs.text("email_input", email_input, candidate.email)
             fields_filled.append("email")
 
         phone_input = page.locator('input[name="phone"]').first
         if phone_input.is_visible():
-            phone_input.fill(candidate.phone)
+            inputs.text("phone_input", phone_input, candidate.phone)
             fields_filled.append("phone")
 
         location_input = page.locator('input[name="location"], input[placeholder*="Location"]').first
         if location_input.is_visible() and candidate.location:
-            location_input.fill(candidate.location)
+            inputs.text("location_input", location_input, candidate.location)
             fields_filled.append("location")
 
         # 3. Social / Profile Links
         linkedin_input = page.locator('input[name="urls[LinkedIn]"], input[placeholder*="LinkedIn"]').first
         if linkedin_input.is_visible() and candidate.linkedin_url:
-            linkedin_input.fill(candidate.linkedin_url)
+            inputs.text("linkedin_input", linkedin_input, candidate.linkedin_url)
             fields_filled.append("linkedin_url")
 
         github_input = page.locator('input[name="urls[GitHub]"], input[placeholder*="GitHub"]').first
         if github_input.is_visible() and candidate.github_url:
-            github_input.fill(candidate.github_url)
+            inputs.text("github_input", github_input, candidate.github_url)
             fields_filled.append("github_url")
 
         portfolio_input = page.locator('input[name="urls[Portfolio]"], input[name="urls[Other]"]').first
         if portfolio_input.is_visible() and candidate.portfolio_url:
-            portfolio_input.fill(candidate.portfolio_url)
+            inputs.text("portfolio_input", portfolio_input, candidate.portfolio_url)
             fields_filled.append("portfolio_url")
-
-        # 4. Comments / Motivation Note
-        comments_input = page.locator('textarea[name="comments"], textarea[placeholder*="additional"]').first
-        if comments_input.is_visible():
-            comments_input.fill("Thank you for reviewing my application. Tailored motivation letter and portfolio documents attached.")
-            fields_filled.append("comments")
-            if letter_pdf:
-                letter_uploaded = True
 
         return FormFillResult(
             driver_name=self.name,

@@ -16,6 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+browser-invisible = ["invisible-playwright==0.39.0"]
 # Firestore, Firebase Functions, and the cloud artifact client are deliberately
 # opt-in.  The normal installation only needs local rendering and Notion MCP.
 cloud = [

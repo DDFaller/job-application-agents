@@ -1,4 +1,4 @@
-"""Playwright-based stealth browser scraper for bot-protected and dynamic job portals."""
+"""Ordinary Playwright rendering for accessible public job postings."""
 
 from __future__ import annotations
 
@@ -12,30 +12,13 @@ from typing import Any
 from ..base import BaseJobScraper
 from ..email.parsers.base import HTMLTextExtractor
 from ..models import ScrapedJobContent
-from .base import DEFAULT_USER_AGENT
+from .base import is_bot_blocked
 
 logger = logging.getLogger(__name__)
 
 
-# Stealth evasion script executed before any page scripts
-STEALTH_INIT_SCRIPT = """
-Object.defineProperty(navigator, 'webdriver', {
-    get: () => undefined
-});
-Object.defineProperty(navigator, 'plugins', {
-    get: () => [1, 2, 3, 4, 5]
-});
-Object.defineProperty(navigator, 'languages', {
-    get: () => ['en-US', 'en', 'fr-FR', 'fr']
-});
-window.chrome = {
-    runtime: {}
-};
-"""
-
-
 class PlaywrightJobScraper(BaseJobScraper):
-    """Playwright browser scraper designed to bypass anti-bot challenges and extract dynamic job descriptions."""
+    """Render public descriptions without hiding automation or bypassing challenges."""
 
     def __init__(
         self,
@@ -50,7 +33,7 @@ class PlaywrightJobScraper(BaseJobScraper):
         return "playwright"
 
     def scrape(self, url: str, timeout_seconds: int = 35) -> ScrapedJobContent:
-        """Launch browser, navigate to URL with stealth options, and extract complete DOM & text."""
+        """Render an accessible page and extract its DOM and visible text."""
         from playwright.sync_api import sync_playwright
 
         start_time = time.time()
@@ -61,27 +44,13 @@ class PlaywrightJobScraper(BaseJobScraper):
                 browser = p.chromium.launch(
                     headless=self.headless,
                     slow_mo=self.slowmo_ms,
-                    args=[
-                        "--disable-blink-features=AutomationControlled",
-                        "--no-sandbox",
-                        "--disable-setuid-sandbox",
-                        "--disable-infobars",
-                        "--window-position=0,0",
-                        "--ignore-certifcate-errors",
-                        "--ignore-certifcate-errors-spki-list",
-                    ],
                 )
 
                 context = browser.new_context(
-                    user_agent=DEFAULT_USER_AGENT,
                     viewport={"width": 1920, "height": 1080},
                     locale="en-US",
                     timezone_id="Europe/Paris",
-                    bypass_csp=True,
                 )
-
-                # Inject stealth script
-                context.add_init_script(STEALTH_INIT_SCRIPT)
 
                 page = context.new_page()
                 page.set_default_timeout(timeout_ms)
@@ -93,6 +62,22 @@ class PlaywrightJobScraper(BaseJobScraper):
 
                 # Wait slightly for dynamic JS rendering
                 page.wait_for_timeout(1500)
+
+                if (not 200 <= status_code < 300
+                        or is_bot_blocked(status_code, page.content())
+                        or any(field.is_visible() for field in page.locator('input[type="password"]').all())
+                        or any(widget.is_visible() for widget in page.locator(
+                            '.g-recaptcha, .h-captcha, .cf-turnstile, '
+                            'iframe[src*="hcaptcha"], iframe[src*="challenges.cloudflare.com"], '
+                            'iframe[src*="recaptcha"][title*="challenge" i]'
+                        ).all())):
+                    browser.close()
+                    return ScrapedJobContent(
+                        source_url=url, canonical_url=canonical_url,
+                        status_code=status_code, used_playwright=True,
+                        fetch_duration_seconds=round(time.time() - start_time, 2),
+                        error_message="Rendered page failed or requires authentication or verification; no interaction attempted",
+                    )
 
                 # Dismiss common cookie consent dialogues
                 self._dismiss_cookie_dialogs(page)
@@ -155,15 +140,10 @@ class PlaywrightJobScraper(BaseJobScraper):
     def _dismiss_cookie_dialogs(self, page: Any) -> None:
         """Attempt to dismiss common EU/GDPR cookie consent overlays."""
         cookie_selectors = [
-            "button:has-text('Accept all')",
-            "button:has-text('Accept All')",
-            "button:has-text('Agree & Join')",
-            "button:has-text('Accept')",
-            "button:has-text('I agree')",
-            "button:has-text('Tout accepter')",
-            "button:has-text('J\\'accepte')",
-            "#onetrust-accept-btn-handler",
-            ".artdeco-global-alert-action",
+            "button:has-text('Reject all')",
+            "button:has-text('Only necessary')",
+            "button:has-text('Tout refuser')",
+            "#onetrust-reject-all-handler",
         ]
         for sel in cookie_selectors:
             try:

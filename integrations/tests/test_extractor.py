@@ -40,6 +40,49 @@ Preferred Skills:
 
 class TestJobPostingExtractor(unittest.TestCase):
 
+    def test_unstructured_posting_does_not_invent_missing_facts(self) -> None:
+        scraped = ScrapedJobContent(
+            source_url="https://example.test/jobs/1", canonical_url="https://example.test/jobs/1",
+            title="Engineer", company="Example",
+            visible_text="Our team builds Python services for customers. Contact us to learn more.",
+        )
+        posting, source = JobPostingExtractor().extract(scraped)
+        self.assertEqual(posting.responsibilities, [])
+        self.assertEqual(posting.requirements, [])
+        self.assertIsNone(posting.location)
+        self.assertIsNone(posting.employment_type)
+        self.assertEqual(posting.extraction_status, "partial")
+        self.assertIn("responsibilities", posting.missing_fields)
+        for quotes in posting.field_evidence.values():
+            for quote in quotes:
+                self.assertIn(quote, source)
+
+    def test_failed_retrieval_cannot_be_a_complete_posting(self) -> None:
+        scraped = ScrapedJobContent(
+            source_url="https://example.test/jobs/1", canonical_url="https://example.test/jobs/1",
+            status_code=403, error_message="Access denied",
+        )
+        posting, _ = JobPostingExtractor().extract(scraped)
+        self.assertEqual(posting.extraction_status, "blocked")
+        self.assertTrue(posting.warnings)
+        self.assertIsNone(posting.role)
+        self.assertIsNone(posting.company)
+
+    def test_email_tokens_are_absent_from_persistable_extraction(self) -> None:
+        scraped = ScrapedJobContent(
+            source_url="https://www.linkedin.com/jobs/view/123", canonical_url="https://www.linkedin.com/jobs/view/123",
+            title="Engineer", company="Example", visible_text=SAMPLE_FULL_JOB_TEXT,
+        )
+        alert = JobAlertItem(title="Engineer", company="Example",
+            raw_url="https://www.linkedin.com/comm/jobs/view/123?otpToken=synthetic-secret&midSig=synthetic-signature&trackingId=tracking",
+            canonical_url="https://www.linkedin.com/jobs/view/123")
+        posting, source = JobPostingExtractor().extract(scraped, alert)
+        self.assertEqual(posting.source_url, alert.canonical_url)
+        for value in (json.dumps(posting.to_dict()), source):
+            self.assertNotIn("synthetic-secret", value)
+            self.assertNotIn("synthetic-signature", value)
+            self.assertNotIn("trackingId", value)
+
     def test_extraction_and_validation_compliance(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             out_path = Path(tmpdir)

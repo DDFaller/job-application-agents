@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from integrations.models import ScrapedJobContent
+from integrations.email.parsers.base import HTMLTextExtractor
 from integrations.scrapers.base import is_bot_blocked
 from integrations.scrapers.http_scraper import HttpJobScraper
 from integrations.scrapers.hybrid_scraper import HybridJobScraper
@@ -73,12 +74,31 @@ SAMPLE_BLOCKED_HTML = """
 
 class TestJobScrapers(unittest.TestCase):
 
+    def test_non_rendered_script_and_template_claims_are_not_visible_evidence(self) -> None:
+        extractor = HTMLTextExtractor()
+        extractor.feed('''<script>const role = "invented job requirement";</script>
+            <style>.hidden { color: red; }</style>
+            <template><a href="https://example.test/hidden">Hidden role</a></template>
+            <noscript>Enable JavaScript to continue</noscript>
+            <p>Actual public role</p><a href="https://example.test/job">Apply</a>''')
+        self.assertEqual(extractor.get_text(), 'Actual public role\nApply')
+        self.assertEqual(extractor.links, [('https://example.test/job', 'Apply')])
+
     def test_is_bot_blocked_detection(self) -> None:
         self.assertTrue(is_bot_blocked(403, "Forbidden"))
         self.assertTrue(is_bot_blocked(429, "Too Many Requests"))
         self.assertTrue(is_bot_blocked(999, "Request Denied"))
         self.assertTrue(is_bot_blocked(200, SAMPLE_BLOCKED_HTML))
         self.assertFalse(is_bot_blocked(200, SAMPLE_JOB_PAGE_HTML))
+
+    def test_short_javascript_shell_and_provider_footer_are_not_access_barriers(self) -> None:
+        for html in (
+            '<html><body><div id="app"></div></body></html>',
+            '<html><body>Please enable JavaScript to continue.</body></html>',
+            '<html><body><footer>Protected by Cloudflare and Turnstile</footer></body></html>',
+        ):
+            with self.subTest(html=html):
+                self.assertFalse(is_bot_blocked(200, html))
 
     def test_http_scraper_extracts_json_ld_and_meta(self) -> None:
         scraper = HttpJobScraper()
@@ -117,17 +137,37 @@ class TestJobScrapers(unittest.TestCase):
         mock_http.scrape.assert_called_once()
         mock_pw.scrape.assert_not_called()
 
-    def test_hybrid_scraper_triggers_playwright_on_bot_block(self) -> None:
+    def test_hybrid_scraper_stops_at_http_errors_and_challenges(self) -> None:
+        for status, error, html in (
+            (401, None, ""), (403, "Forbidden", ""), (429, None, ""),
+            (503, None, ""), (999, None, ""),
+            (200, None, SAMPLE_BLOCKED_HTML),
+            (200, "Authentication required", ""),
+        ):
+            with self.subTest(status=status, error=error):
+                http, browser = MagicMock(), MagicMock()
+                http.scrape.return_value = ScrapedJobContent(
+                    source_url="https://example.test/job", canonical_url="https://example.test/job",
+                    status_code=status, raw_html=html, error_message=error,
+                )
+                result = HybridJobScraper(http_scraper=http, playwright_scraper=browser).scrape(
+                    "https://example.test/job"
+                )
+                self.assertIs(result, http.scrape.return_value)
+                self.assertFalse(result.is_success)
+                browser.scrape.assert_not_called()
+
+    def test_hybrid_scraper_renders_accessible_javascript_shell(self) -> None:
         mock_http = MagicMock(spec=HttpJobScraper)
         mock_pw = MagicMock(spec=PlaywrightJobScraper)
 
-        # HTTP returns 403 / bot block error
+        # An accessible JavaScript shell can require ordinary browser rendering.
         mock_http.scrape.return_value = ScrapedJobContent(
             source_url="https://linkedin.com/jobs/view/999",
             canonical_url="https://linkedin.com/jobs/view/999",
-            status_code=403,
+            status_code=200,
             used_playwright=False,
-            error_message="HTTP direct request blocked or challenged (Status: 403)",
+            raw_html='<html><body><div id="app"></div></body></html>',
         )
 
         # Playwright succeeds
@@ -149,6 +189,40 @@ class TestJobScrapers(unittest.TestCase):
         self.assertTrue(res.used_playwright)
         mock_http.scrape.assert_called_once()
         mock_pw.scrape.assert_called_once()
+
+    def test_browser_challenge_stops_before_cookie_or_description_interaction(self) -> None:
+        package = MagicMock()
+        browser = package.sync_playwright.return_value.__enter__.return_value.chromium.launch.return_value
+        page = browser.new_context.return_value.new_page.return_value
+        page.goto.return_value.status = 200
+        page.url = 'https://example.test/job'
+        page.content.return_value = SAMPLE_BLOCKED_HTML
+        scraper = PlaywrightJobScraper()
+        with patch.dict('sys.modules', {'playwright.sync_api': package}), patch.object(
+            scraper, '_dismiss_cookie_dialogs'
+        ) as cookies, patch.object(scraper, '_expand_job_description') as expand:
+            result = scraper.scrape(page.url)
+        self.assertFalse(result.is_success)
+        self.assertIn('verification', result.error_message)
+        cookies.assert_not_called()
+        expand.assert_not_called()
+        browser.close.assert_called_once()
+
+    def test_browser_barrier_is_not_replaced_with_an_incomplete_http_fragment(self) -> None:
+        http, browser = MagicMock(), MagicMock()
+        http.scrape.return_value = ScrapedJobContent(
+            source_url='https://example.test/job', canonical_url='https://example.test/job',
+            visible_text='An incomplete public page fragment. ' * 3,
+        )
+        browser.scrape.return_value = ScrapedJobContent(
+            source_url='https://example.test/job', canonical_url='https://example.test/login',
+            used_playwright=True, error_message='Authentication required',
+        )
+        result = HybridJobScraper(http_scraper=http, playwright_scraper=browser).scrape(
+            'https://example.test/job'
+        )
+        self.assertIs(result, browser.scrape.return_value)
+        self.assertFalse(result.is_success)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ from typing import Any
 
 from ..base import BaseJobScraper
 from ..models import ScrapedJobContent
+from .base import is_bot_blocked
 from .http_scraper import HttpJobScraper
 from .playwright_scraper import PlaywrightJobScraper
 
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class HybridJobScraper(BaseJobScraper):
-    """Orchestrates job scraping with fast HTTP first and Playwright stealth fallback."""
+    """Use ordinary browser rendering only for accessible, incomplete pages."""
 
     def __init__(
         self,
@@ -34,11 +35,17 @@ class HybridJobScraper(BaseJobScraper):
         return "hybrid"
 
     def scrape(self, url: str, timeout_seconds: int = 30) -> ScrapedJobContent:
-        """Attempt fast HTTP direct extraction, falling back to Playwright if blocked or incomplete."""
+        """Fetch directly; stop at errors or barriers before considering rendering."""
         logger.info("Attempting direct HTTP scrape for: %s", url)
         start_time = time.time()
 
         http_result = self.http_scraper.scrape(url, timeout_seconds=min(15, timeout_seconds))
+
+        if (http_result.error_message or not 200 <= http_result.status_code < 300
+                or is_bot_blocked(http_result.status_code, http_result.raw_html)):
+            if not http_result.error_message:
+                http_result.error_message = "HTTP request failed or encountered an access barrier; browser fallback not attempted"
+            return http_result
 
         # Check if HTTP direct scrape succeeded with rich content
         if (
@@ -56,7 +63,7 @@ class HybridJobScraper(BaseJobScraper):
 
         # Fallback to Playwright
         logger.warning(
-            "HTTP direct scrape blocked or incomplete (Status: %d, Length: %d, Error: %s). Activating Playwright fallback...",
+            "Accessible HTTP page needs rendering (Status: %d, Length: %d, Error: %s). Activating Playwright fallback...",
             http_result.status_code,
             len(http_result.visible_text),
             http_result.error_message or "none",
@@ -66,9 +73,6 @@ class HybridJobScraper(BaseJobScraper):
 
         if pw_result.is_success:
             logger.info("Playwright fallback succeeded for %s (%d chars)", url, len(pw_result.visible_text))
-            return pw_result
-
-        # If Playwright also had issues, pick the better of the two results
-        if len(pw_result.visible_text) > len(http_result.visible_text):
-            return pw_result
-        return http_result
+        # Preserve rendering failures, especially authentication or challenges;
+        # an earlier incomplete HTML fragment must not hide a later barrier.
+        return pw_result

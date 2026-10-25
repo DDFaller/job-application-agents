@@ -44,6 +44,13 @@ class RenderBundleTests(unittest.TestCase):
                     "location": "Paris", "dates": "2026", "summary": None,
                     "highlights": [{"text": "Built a Python pipeline."}], "evidence_ids": ["E001"],
                 }],
+            }, {
+                "title": "Education", "items": [{
+                    "type": "education", "institution": "Example International University",
+                    "degree": "Master of Computer Science — Computer Vision and Computer Graphics",
+                    "location": "Example City, France", "dates": "September 2024 – September 2026",
+                    "highlights": [], "evidence_ids": ["E002"],
+                }],
             }],
         }
         with tempfile.TemporaryDirectory() as temporary:
@@ -57,6 +64,37 @@ class RenderBundleTests(unittest.TestCase):
                 bundle, out / "resume.pdf", "international"
             )
             self.assertEqual(quality["pages"], 1)
+            # Positioned CVs must remain readable in the actual compiled PDF.
+            from job_application_agents.resume_readability import readable_latex, validate_pdf
+            (out / "resume.tex").write_text(readable_latex(tex), encoding="utf-8")
+            render_bundle.render_resume_latex(out / "resume.tex", out, 1)
+            validate_pdf(out / "resume.pdf")
+
+    @unittest.skipUnless(latex_runtime_ready(), "complete XeLaTeX/Poppler runtime unavailable")
+    def test_french_education_keeps_long_institution_separate_from_dates(self) -> None:
+        skill = Path(__file__).resolve().parent.parent
+        institution = "Pontifical Catholic University of Rio de Janeiro"
+        dates = "janvier 2018 – janvier 2021"
+        bundle = {
+            "candidate": {"name": "Ada Example", "headline": "Engineer", "location": "Paris",
+                          "contact": ["ada@example.test"], "summary": {"text": "Python engineer."}},
+            "resume_sections": [{"title": "Formation", "items": [{
+                "type": "education", "institution": institution, "degree": "Bachelor",
+                "area": "Computer Science", "dates": dates, "highlights": [],
+            }]}],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            out = Path(temporary)
+            render_bundle.copy_custom_template(render_bundle.builtin_template(skill, "france"), out)
+            from job_application_agents.resume_readability import readable_latex, validate_pdf
+            tex = render_bundle.latex_cv_document(bundle, "france", None, {}, skill)
+            (out / "resume.tex").write_text(readable_latex(tex), encoding="utf-8")
+            render_bundle.render_resume_latex(out / "resume.tex", out, 1)
+            validate_pdf(out / "resume.pdf")
+            import subprocess
+            text = subprocess.run(["pdftotext", str(out / "resume.pdf"), "-"],
+                                  check=True, capture_output=True, text=True).stdout
+            self.assertIn(institution + "\n" + dates, text)
 
     def test_geographic_template_metadata(self) -> None:
         skill = Path(__file__).resolve().parent.parent
@@ -65,7 +103,7 @@ class RenderBundleTests(unittest.TestCase):
         self.assertEqual(json.loads((international / "template.json").read_text())["id"], "international")
         self.assertTrue((france / "cv.cls").is_file())
         international_design, _ = render_bundle.profile_design("international", False)
-        self.assertEqual(international_design["page"]["size"], "us-letter")
+        self.assertEqual(international_design["page"]["size"], "a4")
         france_design, pages = render_bundle.profile_design("france", True)
         self.assertEqual(france_design["page"]["size"], "a4")
         self.assertEqual(france_design["layout"]["columns"], 2)
@@ -83,7 +121,7 @@ class RenderBundleTests(unittest.TestCase):
 
     def test_latex_profile_paper_and_escape(self) -> None:
         skill = Path(__file__).resolve().parent.parent
-        self.assertIn("letterpaper", render_bundle.latex_preamble_for_profile(skill, "international"))
+        self.assertIn("a4paper", render_bundle.latex_preamble_for_profile(skill, "international"))
         self.assertIn("a4paper", render_bundle.latex_preamble_for_profile(skill, "france"))
         self.assertEqual(
             render_bundle.latex_escape("A&B_~^\\"),
@@ -195,6 +233,17 @@ class RenderBundleTests(unittest.TestCase):
             render_bundle.resume_order_anchors(bundle, "france"),
             ["ada", "engineer", "profile", "skills", "languages", "experience", "company"],
         )
+
+    def test_pdf_dehyphenation_preserves_compound_content(self) -> None:
+        bundle = {"candidate": {"summary": {"text": "Built read-only and self-service tools."}}}
+        for profile in ("france", "international"):
+            render_bundle.verify_resume_reading_order_text(
+                bundle, "Built readonly and selfservice tools.", profile,
+            )
+            with self.assertRaisesRegex(RuntimeError, "reading order"):
+                render_bundle.verify_resume_reading_order_text(
+                    bundle, "Built readonly tools.", profile,
+                )
 
     def test_france_stage_requires_approved_photo(self) -> None:
         args = SimpleNamespace(

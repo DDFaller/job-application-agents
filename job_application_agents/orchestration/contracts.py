@@ -8,7 +8,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Iterable, Literal
 
 
 TASK_SCHEMA_VERSION = 1
@@ -52,6 +52,45 @@ class ArtifactReference:
                 raise ValueError(f"artifact hash mismatch: {target}")
 
 
+def is_source_artifact(name: str) -> bool:
+    """True for candidate-source inputs seeded by preflight (not derived outputs)."""
+    return name == "positioning-library.json" or name.startswith("source:") or name.startswith("candidate-source:")
+
+
+def fingerprint_artifacts(
+    artifacts: Iterable[ArtifactReference | dict[str, Any]],
+    *,
+    source_only: bool = False,
+) -> str:
+    """Stable fingerprint over input artifact identities and hashes.
+
+    With source_only=True, only preflight source inputs count, so derived
+    stage outputs (bundles, reviews) do not invalidate the fingerprint.
+    """
+    parts = []
+    for item in artifacts:
+        if isinstance(item, dict):
+            name, path, sha = (str(item.get("name")), str(item.get("path")), str(item.get("sha256")))
+        else:
+            name, path, sha = (item.name, item.path, item.sha256)
+        if source_only and not is_source_artifact(name):
+            continue
+        parts.append((name, path, sha))
+    digest = hashlib.sha256()
+    for name, path, sha in sorted(parts):
+        digest.update(f"{name}\0{path}\0{sha}\0".encode("utf-8"))
+    return digest.hexdigest()
+
+
+# Appended when a stage relaunches with byte-identical inputs: the worker
+# must revise previously accepted artifacts instead of re-extracting data.
+UNCHANGED_SOURCES_CONSTRAINT = (
+    "Sources unchanged (fingerprint {fingerprint}): revise the previously "
+    "accepted artifacts already present in inputs; do not re-extract or "
+    "re-parse candidate data."
+)
+
+
 @dataclass(frozen=True)
 class StageTask:
     batch_id: str
@@ -66,6 +105,7 @@ class StageTask:
     result_path: str
     inputs: tuple[ArtifactReference, ...] = ()
     constraints: tuple[str, ...] = ()
+    source_fingerprint: str = ""
     schema_version: int = TASK_SCHEMA_VERSION
 
     def validate(self) -> None:
@@ -194,6 +234,7 @@ class WorkerProfile:
 
 
 __all__ = [
+    "UNCHANGED_SOURCES_CONSTRAINT",
     "ArtifactReference",
     "StageBlocker",
     "StageResult",
@@ -201,4 +242,6 @@ __all__ = [
     "StageTask",
     "WorkerProfile",
     "atomic_json_write",
+    "fingerprint_artifacts",
+    "is_source_artifact",
 ]

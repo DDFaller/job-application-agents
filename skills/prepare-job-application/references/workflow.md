@@ -11,12 +11,13 @@ Before any worker starts, the controller resolves role-profile sources under
 validates their file paths, and runs render preflight. Legacy source manifests and
 approved role-profile catalogs remain supported for backwards compatibility.
 
-Process exactly one stage per clean session in the streamlined 5-stage order:
+Process exactly one stage per clean session in the 6-stage order:
 1. `job-extraction` ($extract-job-opening)
-2. `bundle-writing` ($tailor-application-bundle)
-3. `copy-humanization` ($humanize-application-copy)
-4. `independent-review` ($review-application-bundle)
-5. `render-promotion` ($render-application-bundle)
+2. `profile-selection` ($select-application-profile; score approved profiles and expose gaps for user review)
+3. `bundle-writing` ($tailor-application-bundle)
+4. `copy-humanization` ($humanize-application-copy)
+5. `independent-review` ($review-application-bundle)
+6. `render-promotion` ($render-application-bundle)
 
 Stages for one job are dependent; only independent jobs run concurrently. No stage
 session spawns or delegates another agent.
@@ -45,3 +46,5 @@ Only the controller may access Notion (via `$notion-track-application`).
   heartbeat at least every 45 seconds while active.
 
 The final response must identify the version directory, generated artifacts, evidence gaps, Notion status, and Notion page URL. Application submission is always out of scope.
+
+New batches require an approved positioning library before launch. Schema-2 selection exposes supported fit, evidence coverage, gaps and unknowns, then pauses at `awaiting_fit_review`. Only an explicit user skip becomes `skipped`. For jobs the user has already selected, `--prepare-selected` continues truthful preparation while preserving the fit report. Submission remains a separate authorized workflow. Stored batch stages preserve legacy order on resume. Positioned CVs must pass the one-page, minimum-10pt PDF gate.
